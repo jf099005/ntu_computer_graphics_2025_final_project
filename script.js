@@ -5,7 +5,7 @@ resizeCanvas();
 
 let config = {
     // Smoke dissipation (decay rate per second)
-    DENSITY_DISSIPATION: 0.5,
+    DENSITY_DISSIPATION: 0.3,
     VELOCITY_DISSIPATION: 0.2,
     TEMPERATURE_DISSIPATION: 1.0,
     // Fluid solver
@@ -14,57 +14,42 @@ let config = {
     CURL: 30,
     // Smoke behaviour
     BUOYANCY: 1.5,
+    SMOKE_WEIGHT: 0.05,    // downward drag per unit density (counters buoyancy)
     // Seed splat radius (used by initSmoke, not exposed in GUI)
     SPLAT_RADIUS: 0.25,
+    // Ray march rendering
+    DENSITY_SCALE: 0.7,    // density multiplier during ray marching
+    ABSORPTION: 15.0,      // opacity per unit distance
     // Display
     PAUSED: false,
-    BACK_COLOR: { r: 0, g: 0, b: 0 },
+    BACK_COLOR: { r: 255, g: 255, b: 255 },
     TRANSPARENT: false,
-    // Post-processing
-    BLOOM: true,
-    BLOOM_ITERATIONS: 8,
-    BLOOM_RESOLUTION: 256,
-    BLOOM_INTENSITY: 0.8,
-    BLOOM_THRESHOLD: 0.6,
-    BLOOM_SOFT_KNEE: 0.7,
-    SUNRAYS: true,
-    SUNRAYS_RESOLUTION: 196,
-    SUNRAYS_WEIGHT: 1.0,
 };
 
 const { gl, ext } = getWebGLContext(canvas);
 
-if (!ext.supportLinearFiltering) {
-    config.BLOOM = false;
-    config.SUNRAYS = false;
-}
+// (Bloom / sunrays removed — rendering uses ray marching)
 
 startGUI();
 
 // Compiled shaders
 const {
     baseVertexShader,
-    blurVertexShader,
-    blurShader,
-    copyShader,
     clearShader,
     colorShader,
-    checkerboardShader,
     displayShaderSource,
-    bloomPrefilterShader,
-    bloomBlurShader,
-    bloomFinalShader,
-    sunraysMaskShader,
-    sunraysShader,
-    splatShader,
-    advectionShader,
-    divergenceShader,
-    curlShader,
-    vorticityShader,
-    pressureShader,
-    gradientSubtractShader,
-    atlasHelperGLSL,
     displayVertexShader,
+    atlasHelperGLSL,
+    // 3D shaders
+    advection3DShader,
+    divergence3DShader,
+    pressure3DShader,
+    gradientSubtract3DShader,
+    curl3DShader,
+    vorticity3DShader,
+    splat3DShader,
+    buoyancyShader,
+    rayMarchShader,
 } = initShaders(gl, ext);
 
 const blit = (() => {
@@ -101,31 +86,21 @@ let temperature;  // R     – temperature field for buoyancy (new)
 let divergence3D; // R     – divergence             (replaces divergence)
 let curl3D;       // R     – vorticity scalar        (replaces curl)
 let pressure3D;   // R     – pressure               (replaces pressure)
-let bloom;
-let bloomFramebuffers = [];
-let sunrays;
-let sunraysTemp;
 
-let ditheringTexture = createTextureAsync('LDR_LLL1_0.png');
-
-// Simulation programs
-const blurProgram            = new Program(blurVertexShader, blurShader);
-const copyProgram            = new Program(baseVertexShader, copyShader);
+// Simulation programs (3D only)
 const clearProgram           = new Program(baseVertexShader, clearShader);
 const colorProgram           = new Program(baseVertexShader, colorShader);
-const checkerboardProgram    = new Program(baseVertexShader, checkerboardShader);
-const bloomPrefilterProgram  = new Program(baseVertexShader, bloomPrefilterShader);
-const bloomBlurProgram       = new Program(baseVertexShader, bloomBlurShader);
-const bloomFinalProgram      = new Program(baseVertexShader, bloomFinalShader);
-const sunraysMaskProgram     = new Program(baseVertexShader, sunraysMaskShader);
-const sunraysProgram         = new Program(baseVertexShader, sunraysShader);
-const splatProgram           = new Program(baseVertexShader, splatShader);
-const advectionProgram       = new Program(baseVertexShader, advectionShader);
-const divergenceProgram      = new Program(baseVertexShader, divergenceShader);
-const curlProgram            = new Program(baseVertexShader, curlShader);
-const vorticityProgram       = new Program(baseVertexShader, vorticityShader);
-const pressureProgram        = new Program(baseVertexShader, pressureShader);
-const gradienSubtractProgram = new Program(baseVertexShader, gradientSubtractShader);
+
+// 3D simulation programs
+const advection3DProgram       = new Program(baseVertexShader, advection3DShader);
+const divergence3DProgram      = new Program(baseVertexShader, divergence3DShader);
+const pressure3DProgram        = new Program(baseVertexShader, pressure3DShader);
+const gradientSubtract3DProgram= new Program(baseVertexShader, gradientSubtract3DShader);
+const curl3DProgram            = new Program(baseVertexShader, curl3DShader);
+const vorticity3DProgram       = new Program(baseVertexShader, vorticity3DShader);
+const splat3DProgram           = new Program(baseVertexShader, splat3DShader);
+const buoyancyProgram          = new Program(baseVertexShader, buoyancyShader);
+const rayMarchProgram          = new Program(baseVertexShader, rayMarchShader);
 
 const displayMaterial = new Material(displayVertexShader, displayShaderSource);
 
@@ -139,7 +114,6 @@ const camera = {
 };
 
 // Bootstrap
-updateKeywords();
 initFramebuffers();
 initSmoke();
 

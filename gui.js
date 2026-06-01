@@ -7,21 +7,18 @@ function startGUI () {
     gui.add(config, 'DENSITY_DISSIPATION',     0, 4.0).name('density diffusion');
     gui.add(config, 'VELOCITY_DISSIPATION',    0, 4.0).name('velocity diffusion');
     gui.add(config, 'TEMPERATURE_DISSIPATION', 0, 4.0).name('temperature diffusion');
-    gui.add(config, 'BUOYANCY',                0, 5.0).name('buoyancy');
+    gui.add(config, 'BUOYANCY',                0, 5.0).name('buoyancy (rise)');
+    gui.add(config, 'SMOKE_WEIGHT',            0, 1.0).name('smoke weight (fall)');
     gui.add(config, 'CURL',  0, 50).name('vorticity').step(1);
     gui.add(config, 'PRESSURE', 0.0, 1.0).name('pressure');
     gui.add(config, 'PAUSED').name('paused').listen();
     gui.add({ fun: initSmoke }, 'fun').name('re-emit smoke');
 
-    // Post-processing
-    let bloomFolder = gui.addFolder('Bloom');
-    bloomFolder.add(config, 'BLOOM').name('enabled').onFinishChange(updateKeywords);
-    bloomFolder.add(config, 'BLOOM_INTENSITY', 0.1, 2.0).name('intensity');
-    bloomFolder.add(config, 'BLOOM_THRESHOLD', 0.0, 1.0).name('threshold');
-
-    let sunraysFolder = gui.addFolder('Sunrays');
-    sunraysFolder.add(config, 'SUNRAYS').name('enabled').onFinishChange(updateKeywords);
-    sunraysFolder.add(config, 'SUNRAYS_WEIGHT', 0.3, 1.0).name('weight');
+    // Rendering
+    let renderFolder = gui.addFolder('Rendering');
+    renderFolder.add(config, 'DENSITY_SCALE',  0.01, 2.0).name('density scale');
+    renderFolder.add(config, 'ABSORPTION',      1.0, 50.0).name('absorption');
+    renderFolder.open();
 
     // Capture
     let captureFolder = gui.addFolder('Capture');

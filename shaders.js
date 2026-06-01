@@ -47,52 +47,7 @@ function initShaders (gl, ext) {
         }
     `);
 
-    const blurVertexShader = compileShader(gl.VERTEX_SHADER, /*glsl*/`
-        precision highp float;
 
-        attribute vec2 aPosition;
-        varying vec2 vUv;
-        varying vec2 vL;
-        varying vec2 vR;
-        uniform vec2 texelSize;
-
-        void main () {
-            vUv = aPosition * 0.5 + 0.5;
-            float offset = 1.33333333;
-            vL = vUv - texelSize * offset;
-            vR = vUv + texelSize * offset;
-            gl_Position = vec4(aPosition, 0.0, 1.0);
-        }
-    `);
-
-    const blurShader = compileShader(gl.FRAGMENT_SHADER, /*glsl*/`
-        precision mediump float;
-        precision mediump sampler2D;
-
-        varying vec2 vUv;
-        varying vec2 vL;
-        varying vec2 vR;
-        uniform sampler2D uTexture;
-
-        void main () {
-            vec4 sum = texture2D(uTexture, vUv) * 0.29411764;
-            sum += texture2D(uTexture, vL) * 0.35294117;
-            sum += texture2D(uTexture, vR) * 0.35294117;
-            gl_FragColor = sum;
-        }
-    `);
-
-    const copyShader = compileShader(gl.FRAGMENT_SHADER, /*glsl*/`
-        precision mediump float;
-        precision mediump sampler2D;
-
-        varying highp vec2 vUv;
-        uniform sampler2D uTexture;
-
-        void main () {
-            gl_FragColor = texture2D(uTexture, vUv);
-        }
-    `);
 
     const clearShader = compileShader(gl.FRAGMENT_SHADER, /*glsl*/`
         precision mediump float;
@@ -114,24 +69,6 @@ function initShaders (gl, ext) {
 
         void main () {
             gl_FragColor = color;
-        }
-    `);
-
-    const checkerboardShader = compileShader(gl.FRAGMENT_SHADER, /*glsl*/`
-        precision highp float;
-        precision highp sampler2D;
-
-        varying vec2 vUv;
-        uniform sampler2D uTexture;
-        uniform float aspectRatio;
-
-        #define SCALE 25.0
-
-        void main () {
-            vec2 uv = floor(vUv * SCALE * vec2(aspectRatio, 1.0));
-            float v = mod(uv.x + uv.y, 2.0);
-            v = v * 0.1 + 0.8;
-            gl_FragColor = vec4(vec3(v), 1.0);
         }
     `);
 
@@ -200,319 +137,26 @@ function initShaders (gl, ext) {
         }
     `;
 
-    const bloomPrefilterShader = compileShader(gl.FRAGMENT_SHADER, /*glsl*/`
-        precision mediump float;
-        precision mediump sampler2D;
-
-        varying vec2 vUv;
-        uniform sampler2D uTexture;
-        uniform vec3 curve;
-        uniform float threshold;
-
-        void main () {
-            vec3 c = texture2D(uTexture, vUv).rgb;
-            float br = max(c.r, max(c.g, c.b));
-            float rq = clamp(br - curve.x, 0.0, curve.y);
-            rq = curve.z * rq * rq;
-            c *= max(rq, br - threshold) / max(br, 0.0001);
-            gl_FragColor = vec4(c, 0.0);
-        }
-    `);
-
-    const bloomBlurShader = compileShader(gl.FRAGMENT_SHADER, /*glsl*/`
-        precision mediump float;
-        precision mediump sampler2D;
-
-        varying vec2 vL;
-        varying vec2 vR;
-        varying vec2 vT;
-        varying vec2 vB;
-        uniform sampler2D uTexture;
-
-        void main () {
-            vec4 sum = vec4(0.0);
-            sum += texture2D(uTexture, vL);
-            sum += texture2D(uTexture, vR);
-            sum += texture2D(uTexture, vT);
-            sum += texture2D(uTexture, vB);
-            sum *= 0.25;
-            gl_FragColor = sum;
-        }
-    `);
-
-    const bloomFinalShader = compileShader(gl.FRAGMENT_SHADER, /*glsl*/`
-        precision mediump float;
-        precision mediump sampler2D;
-
-        varying vec2 vL;
-        varying vec2 vR;
-        varying vec2 vT;
-        varying vec2 vB;
-        uniform sampler2D uTexture;
-        uniform float intensity;
-
-        void main () {
-            vec4 sum = vec4(0.0);
-            sum += texture2D(uTexture, vL);
-            sum += texture2D(uTexture, vR);
-            sum += texture2D(uTexture, vT);
-            sum += texture2D(uTexture, vB);
-            sum *= 0.25;
-            gl_FragColor = sum * intensity;
-        }
-    `);
-
-    const sunraysMaskShader = compileShader(gl.FRAGMENT_SHADER, /*glsl*/`
-        precision highp float;
-        precision highp sampler2D;
-
-        varying vec2 vUv;
-        uniform sampler2D uTexture;
-
-        void main () {
-            vec4 c = texture2D(uTexture, vUv);
-            float br = max(c.r, max(c.g, c.b));
-            c.a = 1.0 - min(max(br * 20.0, 0.0), 0.8);
-            gl_FragColor = c;
-        }
-    `);
-
-    const sunraysShader = compileShader(gl.FRAGMENT_SHADER, /*glsl*/`
-        precision highp float;
-        precision highp sampler2D;
-
-        varying vec2 vUv;
-        uniform sampler2D uTexture;
-        uniform float weight;
-
-        #define ITERATIONS 16
-
-        void main () {
-            float Density = 0.3;
-            float Decay = 0.95;
-            float Exposure = 0.7;
-
-            vec2 coord = vUv;
-            vec2 dir = vUv - 0.5;
-
-            dir *= 1.0 / float(ITERATIONS) * Density;
-            float illuminationDecay = 1.0;
-
-            float color = texture2D(uTexture, vUv).a;
-
-            for (int i = 0; i < ITERATIONS; i++)
-            {
-                coord -= dir;
-                float col = texture2D(uTexture, coord).a;
-                color += col * illuminationDecay * weight;
-                illuminationDecay *= Decay;
-            }
-
-            gl_FragColor = vec4(color * Exposure, 0.0, 0.0, 1.0);
-        }
-    `);
-
-    const splatShader = compileShader(gl.FRAGMENT_SHADER, /*glsl*/`
-        precision highp float;
-        precision highp sampler2D;
-
-        varying vec2 vUv;
-        uniform sampler2D uTarget;
-        uniform float aspectRatio;
-        uniform vec3 color;
-        uniform vec2 point;
-        uniform float radius;
-
-        void main () {
-            vec2 p = vUv - point.xy;
-            p.x *= aspectRatio;
-            vec3 splat = exp(-dot(p, p) / radius) * color;
-            vec3 base = texture2D(uTarget, vUv).xyz;
-            gl_FragColor = vec4(base + splat, 1.0);
-        }
-    `);
-
-    const advectionShader = compileShader(gl.FRAGMENT_SHADER, /*glsl*/`
-        precision highp float;
-        precision highp sampler2D;
-
-        varying vec2 vUv;
-        uniform sampler2D uVelocity;
-        uniform sampler2D uSource;
-        uniform vec2 texelSize;
-        uniform vec2 dyeTexelSize;
-        uniform float dt;
-        uniform float dissipation;
-
-        vec4 bilerp (sampler2D sam, vec2 uv, vec2 tsize) {
-            vec2 st = uv / tsize - 0.5;
-
-            vec2 iuv = floor(st);
-            vec2 fuv = fract(st);
-
-            vec4 a = texture2D(sam, (iuv + vec2(0.5, 0.5)) * tsize);
-            vec4 b = texture2D(sam, (iuv + vec2(1.5, 0.5)) * tsize);
-            vec4 c = texture2D(sam, (iuv + vec2(0.5, 1.5)) * tsize);
-            vec4 d = texture2D(sam, (iuv + vec2(1.5, 1.5)) * tsize);
-
-            return mix(mix(a, b, fuv.x), mix(c, d, fuv.x), fuv.y);
-        }
-
-        void main () {
-        #ifdef MANUAL_FILTERING
-            vec2 coord = vUv - dt * bilerp(uVelocity, vUv, texelSize).xy * texelSize;
-            vec4 result = bilerp(uSource, coord, dyeTexelSize);
-        #else
-            vec2 coord = vUv - dt * texture2D(uVelocity, vUv).xy * texelSize;
-            vec4 result = texture2D(uSource, coord);
-        #endif
-            float decay = 1.0 + dissipation * dt;
-            gl_FragColor = result / decay;
-        }`,
-        ext.supportLinearFiltering ? null : ['MANUAL_FILTERING']
-    );
-
-    const divergenceShader = compileShader(gl.FRAGMENT_SHADER, /*glsl*/`
-        precision mediump float;
-        precision mediump sampler2D;
-
-        varying highp vec2 vUv;
-        varying highp vec2 vL;
-        varying highp vec2 vR;
-        varying highp vec2 vT;
-        varying highp vec2 vB;
-        uniform sampler2D uVelocity;
-
-        void main () {
-            float L = texture2D(uVelocity, vL).x;
-            float R = texture2D(uVelocity, vR).x;
-            float T = texture2D(uVelocity, vT).y;
-            float B = texture2D(uVelocity, vB).y;
-
-            vec2 C = texture2D(uVelocity, vUv).xy;
-            if (vL.x < 0.0) { L = -C.x; }
-            if (vR.x > 1.0) { R = -C.x; }
-            if (vT.y > 1.0) { T = -C.y; }
-            if (vB.y < 0.0) { B = -C.y; }
-
-            float div = 0.5 * (R - L + T - B);
-            gl_FragColor = vec4(div, 0.0, 0.0, 1.0);
-        }
-    `);
-
-    const curlShader = compileShader(gl.FRAGMENT_SHADER, /*glsl*/`
-        precision mediump float;
-        precision mediump sampler2D;
-
-        varying highp vec2 vUv;
-        varying highp vec2 vL;
-        varying highp vec2 vR;
-        varying highp vec2 vT;
-        varying highp vec2 vB;
-        uniform sampler2D uVelocity;
-
-        void main () {
-            float L = texture2D(uVelocity, vL).y;
-            float R = texture2D(uVelocity, vR).y;
-            float T = texture2D(uVelocity, vT).x;
-            float B = texture2D(uVelocity, vB).x;
-            float vorticity = R - L - T + B;
-            gl_FragColor = vec4(0.5 * vorticity, 0.0, 0.0, 1.0);
-        }
-    `);
-
-    const vorticityShader = compileShader(gl.FRAGMENT_SHADER, /*glsl*/`
-        precision highp float;
-        precision highp sampler2D;
-
-        varying vec2 vUv;
-        varying vec2 vL;
-        varying vec2 vR;
-        varying vec2 vT;
-        varying vec2 vB;
-        uniform sampler2D uVelocity;
-        uniform sampler2D uCurl;
-        uniform float curl;
-        uniform float dt;
-
-        void main () {
-            float L = texture2D(uCurl, vL).x;
-            float R = texture2D(uCurl, vR).x;
-            float T = texture2D(uCurl, vT).x;
-            float B = texture2D(uCurl, vB).x;
-            float C = texture2D(uCurl, vUv).x;
-
-            vec2 force = 0.5 * vec2(abs(T) - abs(B), abs(R) - abs(L));
-            force /= length(force) + 0.0001;
-            force *= curl * C;
-            force.y *= -1.0;
-
-            vec2 velocity = texture2D(uVelocity, vUv).xy;
-            velocity += force * dt;
-            velocity = min(max(velocity, -1000.0), 1000.0);
-            gl_FragColor = vec4(velocity, 0.0, 1.0);
-        }
-    `);
-
-    const pressureShader = compileShader(gl.FRAGMENT_SHADER, /*glsl*/`
-        precision mediump float;
-        precision mediump sampler2D;
-
-        varying highp vec2 vUv;
-        varying highp vec2 vL;
-        varying highp vec2 vR;
-        varying highp vec2 vT;
-        varying highp vec2 vB;
-        uniform sampler2D uPressure;
-        uniform sampler2D uDivergence;
-
-        void main () {
-            float L = texture2D(uPressure, vL).x;
-            float R = texture2D(uPressure, vR).x;
-            float T = texture2D(uPressure, vT).x;
-            float B = texture2D(uPressure, vB).x;
-            float C = texture2D(uPressure, vUv).x;
-            float divergence = texture2D(uDivergence, vUv).x;
-            float pressure = (L + R + B + T - divergence) * 0.25;
-            gl_FragColor = vec4(pressure, 0.0, 0.0, 1.0);
-        }
-    `);
-
-    const gradientSubtractShader = compileShader(gl.FRAGMENT_SHADER, /*glsl*/`
-        precision mediump float;
-        precision mediump sampler2D;
-
-        varying highp vec2 vUv;
-        varying highp vec2 vL;
-        varying highp vec2 vR;
-        varying highp vec2 vT;
-        varying highp vec2 vB;
-        uniform sampler2D uPressure;
-        uniform sampler2D uVelocity;
-
-        void main () {
-            float L = texture2D(uPressure, vL).x;
-            float R = texture2D(uPressure, vR).x;
-            float T = texture2D(uPressure, vT).x;
-            float B = texture2D(uPressure, vB).x;
-            vec2 velocity = texture2D(uVelocity, vUv).xy;
-            velocity.xy -= vec2(R - L, T - B);
-            gl_FragColor = vec4(velocity, 0.0, 1.0);
-        }
-    `);
-
-    // ── 3D Atlas GLSL helpers ─────────────────────────────────────────────────
-    // Shared GLSL snippet prepended to all Phase 2 3D simulation shaders.
-    // The 64³ volume is stored as a 512×512 2D atlas (8×8 tiles of 64×64 slices).
-    //
-    //   encodeUVW(uvw)            – [0,1]³ → 2D atlas UV
-    //   sampleVolume(tex, uvw)    – trilinear sample with Z-slice interpolation
-    //   STEP_X / STEP_Y / STEP_Z  – one-voxel offsets in [0,1]³ space
+    // ── 3D Atlas GLSL helpers (prepended to every 3D shader) ─────────────────
+    // decodeUVW  – atlas UV → [0,1]³
+    // encodeUVW  – [0,1]³  → atlas UV
+    // sampleVolume – trilinear sample with Z-slice interpolation
+    // STEP_X/Y/Z – one-voxel offsets in [0,1]³ space
     const atlasHelperGLSL = /*glsl*/`
+        precision highp float;
+        precision highp sampler2D;
+
         #define VOLUME_SIZE    64.0
         #define SLICES_PER_ROW  8.0
 
-        // Encode 3D normalised coordinates [0,1]³ to 2D atlas UV.
+        vec3 decodeUVW (vec2 atlasUV) {
+            vec2  sc    = atlasUV * SLICES_PER_ROW;
+            float col   = floor(sc.x);
+            float row   = floor(sc.y);
+            float slice = row * SLICES_PER_ROW + col;
+            return vec3(fract(sc), slice / (VOLUME_SIZE - 1.0));
+        }
+
         vec2 encodeUVW (vec3 uvw) {
             uvw = clamp(uvw, 0.0, 1.0);
             float slice = uvw.z * (VOLUME_SIZE - 1.0);
@@ -521,7 +165,6 @@ function initShaders (gl, ext) {
             return (vec2(col, row) + uvw.xy) / SLICES_PER_ROW;
         }
 
-        // Sample 3D volume with linear interpolation between adjacent Z slices.
         vec4 sampleVolume (sampler2D tex, vec3 uvw) {
             uvw = clamp(uvw, 0.0, 1.0);
             float z  = uvw.z * (VOLUME_SIZE - 1.0);
@@ -533,34 +176,310 @@ function initShaders (gl, ext) {
             return mix(s0, s1, t);
         }
 
-        // One-voxel steps in normalised [0,1]³ space.
         const vec3 STEP_X = vec3(1.0 / (VOLUME_SIZE - 1.0), 0.0, 0.0);
         const vec3 STEP_Y = vec3(0.0, 1.0 / (VOLUME_SIZE - 1.0), 0.0);
         const vec3 STEP_Z = vec3(0.0, 0.0, 1.0 / (VOLUME_SIZE - 1.0));
     `;
 
+    // ── 3D simulation shaders ─────────────────────────────────────────────────
+
+    // Semi-Lagrangian advection.
+    // Velocity is stored in [0,1]³ domain units / second.
+    const advection3DShader = compileShader(gl.FRAGMENT_SHADER, atlasHelperGLSL + /*glsl*/`
+        varying highp vec2 vUv;
+        uniform sampler2D uVelocity;
+        uniform sampler2D uSource;
+        uniform float dt;
+        uniform float dissipation;
+
+        void main () {
+            vec3 uvw  = decodeUVW(vUv);
+            vec3 vel  = sampleVolume(uVelocity, uvw).xyz;
+            vec3 prev = clamp(uvw - dt * vel, 0.0, 1.0);
+            vec4 result = sampleVolume(uSource, prev);
+            float decay = 1.0 + dissipation * dt;
+            gl_FragColor = result / decay;
+        }
+    `);
+
+    // 6-neighbor divergence with no-slip boundary conditions.
+    const divergence3DShader = compileShader(gl.FRAGMENT_SHADER, atlasHelperGLSL + /*glsl*/`
+        varying highp vec2 vUv;
+        uniform sampler2D uVelocity;
+
+        void main () {
+            vec3 uvw = decodeUVW(vUv);
+            vec3 C   = sampleVolume(uVelocity, uvw).xyz;
+
+            float vL = sampleVolume(uVelocity, uvw - STEP_X).x;
+            float vR = sampleVolume(uVelocity, uvw + STEP_X).x;
+            float vB = sampleVolume(uVelocity, uvw - STEP_Y).y;
+            float vT = sampleVolume(uVelocity, uvw + STEP_Y).y;
+            float vF = sampleVolume(uVelocity, uvw - STEP_Z).z;
+            float vK = sampleVolume(uVelocity, uvw + STEP_Z).z;
+
+            if (uvw.x < STEP_X.x)        vL = -C.x;
+            if (uvw.x > 1.0 - STEP_X.x)  vR = -C.x;
+            if (uvw.y < STEP_Y.y)        vB = -C.y;
+            if (uvw.y > 1.0 - STEP_Y.y)  vT = -C.y;
+            if (uvw.z < STEP_Z.z)        vF = -C.z;
+            if (uvw.z > 1.0 - STEP_Z.z)  vK = -C.z;
+
+            float div = 0.5 * ((vR - vL) + (vT - vB) + (vK - vF));
+            gl_FragColor = vec4(div, 0.0, 0.0, 1.0);
+        }
+    `);
+
+    // Jacobi pressure iteration: 6-neighbor average minus divergence.
+    const pressure3DShader = compileShader(gl.FRAGMENT_SHADER, atlasHelperGLSL + /*glsl*/`
+        varying highp vec2 vUv;
+        uniform sampler2D uPressure;
+        uniform sampler2D uDivergence;
+
+        void main () {
+            vec3 uvw = decodeUVW(vUv);
+
+            float pL = sampleVolume(uPressure, uvw - STEP_X).x;
+            float pR = sampleVolume(uPressure, uvw + STEP_X).x;
+            float pB = sampleVolume(uPressure, uvw - STEP_Y).x;
+            float pT = sampleVolume(uPressure, uvw + STEP_Y).x;
+            float pF = sampleVolume(uPressure, uvw - STEP_Z).x;
+            float pK = sampleVolume(uPressure, uvw + STEP_Z).x;
+
+            float divergence = sampleVolume(uDivergence, uvw).x;
+            float pressure   = (pL + pR + pB + pT + pF + pK - divergence) / 6.0;
+            gl_FragColor = vec4(pressure, 0.0, 0.0, 1.0);
+        }
+    `);
+
+    // Subtract pressure gradient to enforce ∇·v = 0.
+    const gradientSubtract3DShader = compileShader(gl.FRAGMENT_SHADER, atlasHelperGLSL + /*glsl*/`
+        varying highp vec2 vUv;
+        uniform sampler2D uPressure;
+        uniform sampler2D uVelocity;
+
+        void main () {
+            vec3 uvw = decodeUVW(vUv);
+
+            float pL = sampleVolume(uPressure, uvw - STEP_X).x;
+            float pR = sampleVolume(uPressure, uvw + STEP_X).x;
+            float pB = sampleVolume(uPressure, uvw - STEP_Y).x;
+            float pT = sampleVolume(uPressure, uvw + STEP_Y).x;
+            float pF = sampleVolume(uPressure, uvw - STEP_Z).x;
+            float pK = sampleVolume(uPressure, uvw + STEP_Z).x;
+
+            vec3 vel = sampleVolume(uVelocity, uvw).xyz;
+            vel -= 0.5 * vec3(pR - pL, pT - pB, pK - pF);
+            gl_FragColor = vec4(vel, 1.0);
+        }
+    `);
+
+    // 3D curl  ∇ × v  — vector field stored in RGB.
+    const curl3DShader = compileShader(gl.FRAGMENT_SHADER, atlasHelperGLSL + /*glsl*/`
+        varying highp vec2 vUv;
+        uniform sampler2D uVelocity;
+
+        void main () {
+            vec3 uvw = decodeUVW(vUv);
+
+            vec3 vL = sampleVolume(uVelocity, uvw - STEP_X).xyz;
+            vec3 vR = sampleVolume(uVelocity, uvw + STEP_X).xyz;
+            vec3 vB = sampleVolume(uVelocity, uvw - STEP_Y).xyz;
+            vec3 vT = sampleVolume(uVelocity, uvw + STEP_Y).xyz;
+            vec3 vF = sampleVolume(uVelocity, uvw - STEP_Z).xyz;
+            vec3 vK = sampleVolume(uVelocity, uvw + STEP_Z).xyz;
+
+            // (∂w/∂y - ∂v/∂z,  ∂u/∂z - ∂w/∂x,  ∂v/∂x - ∂u/∂y)
+            float cx = 0.5 * ((vT.z - vB.z) - (vK.y - vF.y));
+            float cy = 0.5 * ((vK.x - vF.x) - (vR.z - vL.z));
+            float cz = 0.5 * ((vR.y - vL.y) - (vT.x - vB.x));
+            gl_FragColor = vec4(cx, cy, cz, 0.0);
+        }
+    `);
+
+    // 3D vorticity confinement — restores curl energy lost to numerical diffusion.
+    const vorticity3DShader = compileShader(gl.FRAGMENT_SHADER, atlasHelperGLSL + /*glsl*/`
+        varying highp vec2 vUv;
+        uniform sampler2D uVelocity;
+        uniform sampler2D uCurl;
+        uniform float curl;
+        uniform float dt;
+
+        void main () {
+            vec3 uvw = decodeUVW(vUv);
+
+            float cL = length(sampleVolume(uCurl, uvw - STEP_X).xyz);
+            float cR = length(sampleVolume(uCurl, uvw + STEP_X).xyz);
+            float cB = length(sampleVolume(uCurl, uvw - STEP_Y).xyz);
+            float cT = length(sampleVolume(uCurl, uvw + STEP_Y).xyz);
+            float cF = length(sampleVolume(uCurl, uvw - STEP_Z).xyz);
+            float cK = length(sampleVolume(uCurl, uvw + STEP_Z).xyz);
+
+            vec3 eta   = normalize(vec3(cR - cL, cT - cB, cK - cF) + 0.0001);
+            vec3 omega = sampleVolume(uCurl, uvw).xyz;
+            vec3 force = curl * cross(eta, omega);
+
+            vec3 vel = sampleVolume(uVelocity, uvw).xyz;
+            vel += force * dt;
+            vel  = clamp(vel, -1.0, 1.0);
+            gl_FragColor = vec4(vel, 1.0);
+        }
+    `);
+
+    // 3D Gaussian splat — injects density / velocity / temperature at a point.
+    const splat3DShader = compileShader(gl.FRAGMENT_SHADER, atlasHelperGLSL + /*glsl*/`
+        varying highp vec2 vUv;
+        uniform sampler2D uTarget;
+        uniform vec3 uPoint;    // emitter centre in [0,1]³
+        uniform vec3 uColor;    // value to inject (velocity XYZ or density RGB)
+        uniform float uRadius;  // Gaussian σ² in [0,1]³ space
+
+        void main () {
+            vec3 uvw  = decodeUVW(vUv);
+            vec3 p    = uvw - uPoint;
+            float d   = exp(-dot(p, p) / uRadius);
+            vec4 base = sampleVolume(uTarget, uvw);
+            gl_FragColor = vec4(base.rgb + uColor * d, base.a);
+        }
+    `);
+
+    // Buoyancy force: hot smoke rises, dense smoke sinks.
+    const buoyancyShader = compileShader(gl.FRAGMENT_SHADER, atlasHelperGLSL + /*glsl*/`
+        varying highp vec2 vUv;
+        uniform sampler2D uVelocity;
+        uniform sampler2D uTemperature;
+        uniform sampler2D uDensity;
+        uniform float uBuoyancy;
+        uniform float uWeight;
+        uniform float dt;
+
+        void main () {
+            vec3  uvw  = decodeUVW(vUv);
+            float temp = sampleVolume(uTemperature, uvw).x;
+            float dens = length(sampleVolume(uDensity, uvw).rgb);
+            vec3  vel  = sampleVolume(uVelocity, uvw).xyz;
+
+            vel.y += dt * (uBuoyancy * temp - uWeight * dens);
+            vel    = clamp(vel, -1.0, 1.0);
+            gl_FragColor = vec4(vel, 1.0);
+        }
+    `);
+
+    // ── Volumetric ray marching display ──────────────────────────────────────
+    // Renders the density volume as 3D smoke using front-to-back compositing.
+    // Camera basis vectors are passed as uniforms from drawRayMarch() in JS.
+    const rayMarchShader = compileShader(gl.FRAGMENT_SHADER, atlasHelperGLSL + /*glsl*/`
+        varying highp vec2 vUv;
+
+        uniform sampler2D uDensity;
+        uniform sampler2D uTemperature;
+
+        // Camera
+        uniform vec3  uCameraPos;
+        uniform vec3  uCameraForward;
+        uniform vec3  uCameraRight;
+        uniform vec3  uCameraUp;
+        uniform float uTanHalfFov;
+        uniform float uAspect;
+
+        // Lighting & rendering
+        uniform vec3  uLightDir;
+        uniform vec3  uLightColor;
+        uniform float uDensityScale;
+        uniform float uAbsorption;
+
+        #define MAX_STEPS     64
+        #define SHADOW_STEPS   3
+        #define SHADOW_STEP  0.12
+
+        // Slab intersection with the unit smoke cube [-0.5, 0.5]³.
+        vec2 intersectBox (vec3 ro, vec3 rd) {
+            vec3 tMin = (-0.5 - ro) / rd;
+            vec3 tMax = ( 0.5 - ro) / rd;
+            vec3 t1   = min(tMin, tMax);
+            vec3 t2   = max(tMin, tMax);
+            return vec2(max(max(t1.x, t1.y), t1.z),
+                        min(min(t2.x, t2.y), t2.z));
+        }
+
+        void main () {
+            // ── Per-pixel ray ────────────────────────────────────────────────
+            vec2 ndc    = vUv * 2.0 - 1.0;
+            vec3 rayDir = normalize(
+                uCameraForward +
+                ndc.x * uAspect * uTanHalfFov * uCameraRight +
+                ndc.y * uTanHalfFov * uCameraUp
+            );
+
+            // ── Volume intersection ─────────────────────────────────────────
+            vec2 t = intersectBox(uCameraPos, rayDir);
+            if (t.y <= t.x) {
+                gl_FragColor = vec4(0.0);
+                return;
+            }
+
+            float tStart   = max(t.x, 0.0);
+            float tEnd     = t.y;
+            float stepSize = (tEnd - tStart) / float(MAX_STEPS);
+
+            // ── Front-to-back compositing ───────────────────────────────────
+            vec4  accum   = vec4(0.0);
+            float transmit = 1.0;
+
+            for (int i = 0; i < MAX_STEPS; i++) {
+                float tSample = tStart + (float(i) + 0.5) * stepSize;
+                vec3  pos     = uCameraPos + tSample * rayDir;
+
+                // World [-0.5,0.5]³ → atlas uvw [0,1]³
+                vec3 uvw     = pos + 0.5;
+                vec4 d       = sampleVolume(uDensity, uvw);
+                float density = length(d.rgb) * uDensityScale;
+                if (density < 0.001) continue;
+
+                // Soft shadow: march toward the light
+                float shadow = 0.0;
+                for (int s = 0; s < SHADOW_STEPS; s++) {
+                    vec3 sp = pos + uLightDir * (float(s) + 0.5) * SHADOW_STEP;
+                    shadow += length(sampleVolume(uDensity, sp + 0.5).rgb);
+                }
+                float lightAtten = exp(-shadow * uDensityScale * uAbsorption * SHADOW_STEP);
+
+                // Temperature tint: cool white → hot orange near the source
+                float temp = sampleVolume(uTemperature, uvw).x;
+                vec3  tint = mix(vec3(0.85, 0.90, 1.00),
+                                 vec3(1.00, 0.55, 0.10),
+                                 clamp(temp * 0.5, 0.0, 1.0));
+
+                vec3  litCol = tint * (uLightColor * lightAtten + vec3(0.35));
+                float alpha  = 1.0 - exp(-density * stepSize * uAbsorption);
+
+                accum.rgb  += transmit * alpha * litCol;
+                accum.a    += transmit * alpha;
+                transmit   *= 1.0 - alpha;
+
+                if (transmit < 0.01) break;
+            }
+
+            gl_FragColor = vec4(accum.rgb, accum.a);
+        }
+    `);
+
     return {
         baseVertexShader,
-        blurVertexShader,
-        blurShader,
-        copyShader,
         clearShader,
         colorShader,
-        checkerboardShader,
         displayShaderSource,
-        bloomPrefilterShader,
-        bloomBlurShader,
-        bloomFinalShader,
-        sunraysMaskShader,
-        sunraysShader,
-        splatShader,
-        advectionShader,
-        divergenceShader,
-        curlShader,
-        vorticityShader,
-        pressureShader,
-        gradientSubtractShader,
-        atlasHelperGLSL,
         displayVertexShader,
+        atlasHelperGLSL,
+        // 3D shaders
+        advection3DShader,
+        divergence3DShader,
+        pressure3DShader,
+        gradientSubtract3DShader,
+        curl3DShader,
+        vorticity3DShader,
+        splat3DShader,
+        buoyancyShader,
+        rayMarchShader,
     };
 }

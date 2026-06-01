@@ -26,59 +26,21 @@ function initFramebuffers () {
     else
         temperature = resizeDoubleFBO(temperature, ATLAS_SIZE, ATLAS_SIZE, r.internalFormat, r.format, texType, filtering);
 
-    divergence3D = createFBO(ATLAS_SIZE, ATLAS_SIZE, r.internalFormat, r.format, texType, gl.NEAREST);
-    curl3D       = createFBO(ATLAS_SIZE, ATLAS_SIZE, r.internalFormat, r.format, texType, gl.NEAREST);
+    divergence3D = createFBO(ATLAS_SIZE, ATLAS_SIZE, r.internalFormat,    r.format,    texType, gl.NEAREST);
+    // curl3D stores a vector field (∇×v) so it needs RGBA
+    curl3D       = createFBO(ATLAS_SIZE, ATLAS_SIZE, rgba.internalFormat, rgba.format, texType, gl.NEAREST);
     pressure3D   = createDoubleFBO(ATLAS_SIZE, ATLAS_SIZE, r.internalFormat, r.format, texType, gl.NEAREST);
-
-    initBloomFramebuffers();
-    initSunraysFramebuffers();
+    // Bloom / sunrays FBOs removed — rendering uses ray marching instead.
 }
-
-function initBloomFramebuffers () {
-    let res = getResolution(config.BLOOM_RESOLUTION);
-
-    const texType   = ext.halfFloatTexType;
-    const rgba      = ext.formatRGBA;
-    const filtering = ext.supportLinearFiltering ? gl.LINEAR : gl.NEAREST;
-
-    bloom = createFBO(res.width, res.height, rgba.internalFormat, rgba.format, texType, filtering);
-
-    bloomFramebuffers.length = 0;
-    for (let i = 0; i < config.BLOOM_ITERATIONS; i++) {
-        let width  = res.width  >> (i + 1);
-        let height = res.height >> (i + 1);
-        if (width < 2 || height < 2) break;
-        let fbo = createFBO(width, height, rgba.internalFormat, rgba.format, texType, filtering);
-        bloomFramebuffers.push(fbo);
-    }
-}
-
-function initSunraysFramebuffers () {
-    let res = getResolution(config.SUNRAYS_RESOLUTION);
-
-    const texType   = ext.halfFloatTexType;
-    const r         = ext.formatR;
-    const filtering = ext.supportLinearFiltering ? gl.LINEAR : gl.NEAREST;
-
-    sunrays     = createFBO(res.width, res.height, r.internalFormat, r.format, texType, filtering);
-    sunraysTemp = createFBO(res.width, res.height, r.internalFormat, r.format, texType, filtering);
-}
-
-function updateKeywords () {
-    let displayKeywords = [];
-    if (config.BLOOM)    displayKeywords.push('BLOOM');
-    if (config.SUNRAYS)  displayKeywords.push('SUNRAYS');
-    displayMaterial.setKeywords(displayKeywords);
-}
-
-// ── Main loop ─────────────────────────────────────────────────────────────────
 
 function update () {
     const dt = calcDeltaTime();
     if (resizeCanvas())
         initFramebuffers();
-    if (!config.PAUSED)
+    if (!config.PAUSED) {
+        emitSmoke();
         step(dt);
+    }
     render(null);
     requestAnimationFrame(update);
 }
@@ -102,101 +64,99 @@ function resizeCanvas () {
     return false;
 }
 
-// ── Fluid solver step (2D shaders running on atlas as placeholder) ─────────────
-// Phase 2 will replace these with proper 3D atlas-aware shaders.
+// ── 3D Fluid solver ───────────────────────────────────────────────────────────
 
 function step (dt) {
     gl.disable(gl.BLEND);
 
-    // Vorticity (curl)
-    curlProgram.bind();
-    gl.uniform2f(curlProgram.uniforms.texelSize, velocity3D.texelSizeX, velocity3D.texelSizeY);
-    gl.uniform1i(curlProgram.uniforms.uVelocity, velocity3D.read.attach(0));
-    blit(curl3D);
-
-    // Vorticity confinement
-    vorticityProgram.bind();
-    gl.uniform2f(vorticityProgram.uniforms.texelSize, velocity3D.texelSizeX, velocity3D.texelSizeY);
-    gl.uniform1i(vorticityProgram.uniforms.uVelocity, velocity3D.read.attach(0));
-    gl.uniform1i(vorticityProgram.uniforms.uCurl,     curl3D.attach(1));
-    gl.uniform1f(vorticityProgram.uniforms.curl, config.CURL);
-    gl.uniform1f(vorticityProgram.uniforms.dt,   dt);
+    // 1. Buoyancy: temperature drives smoke upward
+    buoyancyProgram.bind();
+    gl.uniform1i(buoyancyProgram.uniforms.uVelocity,    velocity3D.read.attach(0));
+    gl.uniform1i(buoyancyProgram.uniforms.uTemperature, temperature.read.attach(1));
+    gl.uniform1i(buoyancyProgram.uniforms.uDensity,     density.read.attach(2));
+    gl.uniform1f(buoyancyProgram.uniforms.uBuoyancy,    config.BUOYANCY);
+    gl.uniform1f(buoyancyProgram.uniforms.uWeight,      config.SMOKE_WEIGHT);
+    gl.uniform1f(buoyancyProgram.uniforms.dt,           dt);
     blit(velocity3D.write);
     velocity3D.swap();
 
-    // Divergence
-    divergenceProgram.bind();
-    gl.uniform2f(divergenceProgram.uniforms.texelSize, velocity3D.texelSizeX, velocity3D.texelSizeY);
-    gl.uniform1i(divergenceProgram.uniforms.uVelocity, velocity3D.read.attach(0));
+    // 2. Curl  ∇ × v  (vector field → RGBA)
+    curl3DProgram.bind();
+    gl.uniform1i(curl3DProgram.uniforms.uVelocity, velocity3D.read.attach(0));
+    blit(curl3D);
+
+    // 3. Vorticity confinement
+    vorticity3DProgram.bind();
+    gl.uniform1i(vorticity3DProgram.uniforms.uVelocity, velocity3D.read.attach(0));
+    gl.uniform1i(vorticity3DProgram.uniforms.uCurl,     curl3D.attach(1));
+    gl.uniform1f(vorticity3DProgram.uniforms.curl, config.CURL);
+    gl.uniform1f(vorticity3DProgram.uniforms.dt,   dt);
+    blit(velocity3D.write);
+    velocity3D.swap();
+
+    // 4. Divergence
+    divergence3DProgram.bind();
+    gl.uniform1i(divergence3DProgram.uniforms.uVelocity, velocity3D.read.attach(0));
     blit(divergence3D);
 
-    // Clear & solve pressure (Jacobi iterations)
+    // 5. Clear pressure then Jacobi solve
     clearProgram.bind();
     gl.uniform1i(clearProgram.uniforms.uTexture, pressure3D.read.attach(0));
-    gl.uniform1f(clearProgram.uniforms.value, config.PRESSURE);
+    gl.uniform1f(clearProgram.uniforms.value,    config.PRESSURE);
     blit(pressure3D.write);
     pressure3D.swap();
 
-    pressureProgram.bind();
-    gl.uniform2f(pressureProgram.uniforms.texelSize, velocity3D.texelSizeX, velocity3D.texelSizeY);
-    gl.uniform1i(pressureProgram.uniforms.uDivergence, divergence3D.attach(0));
+    pressure3DProgram.bind();
+    gl.uniform1i(pressure3DProgram.uniforms.uDivergence, divergence3D.attach(0));
     for (let i = 0; i < config.PRESSURE_ITERATIONS; i++) {
-        gl.uniform1i(pressureProgram.uniforms.uPressure, pressure3D.read.attach(1));
+        gl.uniform1i(pressure3DProgram.uniforms.uPressure, pressure3D.read.attach(1));
         blit(pressure3D.write);
         pressure3D.swap();
     }
 
-    // Subtract pressure gradient
-    gradienSubtractProgram.bind();
-    gl.uniform2f(gradienSubtractProgram.uniforms.texelSize, velocity3D.texelSizeX, velocity3D.texelSizeY);
-    gl.uniform1i(gradienSubtractProgram.uniforms.uPressure, pressure3D.read.attach(0));
-    gl.uniform1i(gradienSubtractProgram.uniforms.uVelocity, velocity3D.read.attach(1));
+    // 6. Subtract pressure gradient
+    gradientSubtract3DProgram.bind();
+    gl.uniform1i(gradientSubtract3DProgram.uniforms.uPressure, pressure3D.read.attach(0));
+    gl.uniform1i(gradientSubtract3DProgram.uniforms.uVelocity, velocity3D.read.attach(1));
     blit(velocity3D.write);
     velocity3D.swap();
 
-    // Advect velocity
-    advectionProgram.bind();
-    gl.uniform2f(advectionProgram.uniforms.texelSize, velocity3D.texelSizeX, velocity3D.texelSizeY);
-    if (!ext.supportLinearFiltering)
-        gl.uniform2f(advectionProgram.uniforms.dyeTexelSize, velocity3D.texelSizeX, velocity3D.texelSizeY);
+    // 7. Advect velocity
+    advection3DProgram.bind();
     let velId = velocity3D.read.attach(0);
-    gl.uniform1i(advectionProgram.uniforms.uVelocity, velId);
-    gl.uniform1i(advectionProgram.uniforms.uSource,   velId);
-    gl.uniform1f(advectionProgram.uniforms.dt,          dt);
-    gl.uniform1f(advectionProgram.uniforms.dissipation, config.VELOCITY_DISSIPATION);
+    gl.uniform1i(advection3DProgram.uniforms.uVelocity,   velId);
+    gl.uniform1i(advection3DProgram.uniforms.uSource,     velId);
+    gl.uniform1f(advection3DProgram.uniforms.dt,          dt);
+    gl.uniform1f(advection3DProgram.uniforms.dissipation, config.VELOCITY_DISSIPATION);
     blit(velocity3D.write);
     velocity3D.swap();
 
-    // Advect density
-    if (!ext.supportLinearFiltering)
-        gl.uniform2f(advectionProgram.uniforms.dyeTexelSize, density.texelSizeX, density.texelSizeY);
-    gl.uniform1i(advectionProgram.uniforms.uVelocity, velocity3D.read.attach(0));
-    gl.uniform1i(advectionProgram.uniforms.uSource,   density.read.attach(1));
-    gl.uniform1f(advectionProgram.uniforms.dissipation, config.DENSITY_DISSIPATION);
+    // 8. Advect density
+    gl.uniform1i(advection3DProgram.uniforms.uVelocity,   velocity3D.read.attach(0));
+    gl.uniform1i(advection3DProgram.uniforms.uSource,     density.read.attach(1));
+    gl.uniform1f(advection3DProgram.uniforms.dissipation, config.DENSITY_DISSIPATION);
     blit(density.write);
     density.swap();
+
+    // 9. Advect temperature
+    gl.uniform1i(advection3DProgram.uniforms.uVelocity,   velocity3D.read.attach(0));
+    gl.uniform1i(advection3DProgram.uniforms.uSource,     temperature.read.attach(1));
+    gl.uniform1f(advection3DProgram.uniforms.dissipation, config.TEMPERATURE_DISSIPATION);
+    blit(temperature.write);
+    temperature.swap();
 }
 
-// ── Rendering (2D atlas display – placeholder until Phase 3 ray marching) ─────
+// ── Volumetric 3D rendering ───────────────────────────────────────────────────
 
 function render (target) {
-    if (config.BLOOM)
-        applyBloom(density.read, bloom);
-    if (config.SUNRAYS) {
-        applySunrays(density.read, density.write, sunrays);
-        blur(sunrays, sunraysTemp, 1);
-    }
-
-    if (target == null || !config.TRANSPARENT) {
-        gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-        gl.enable(gl.BLEND);
-    } else {
-        gl.disable(gl.BLEND);
-    }
+    gl.disable(gl.BLEND);
 
     if (!config.TRANSPARENT)
         drawColor(target, normalizeColor(config.BACK_COLOR));
-    drawDisplay(target);
+
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.enable(gl.BLEND);
+    drawRayMarch(target);
 }
 
 function drawColor (target, color) {
@@ -205,135 +165,103 @@ function drawColor (target, color) {
     blit(target);
 }
 
-function drawDisplay (target) {
-    let width  = target == null ? gl.drawingBufferWidth  : target.width;
-    let height = target == null ? gl.drawingBufferHeight : target.height;
+// Compute orthonormal camera basis from spherical orbit angles.
+function getCameraBasis () {
+    const th = camera.theta, ph = camera.phi, r = camera.radius;
+    const ex = r * Math.sin(th) * Math.cos(ph);
+    const ey = r * Math.sin(ph);
+    const ez = r * Math.cos(th) * Math.cos(ph);
+    const len = Math.sqrt(ex*ex + ey*ey + ez*ez);
 
-    let mvp = getCameraViewProjection(camera.theta, camera.phi, camera.radius, width / height);
+    // forward = normalize(origin – eye)
+    const fx = -ex/len, fy = -ey/len, fz = -ez/len;
 
-    displayMaterial.bind();
-    gl.uniformMatrix4fv(displayMaterial.uniforms.uMVP, false, mvp);
-    gl.uniform2f(displayMaterial.uniforms.texelSize, 1.0 / width, 1.0 / height);
-    gl.uniform1i(displayMaterial.uniforms.uTexture, density.read.attach(0));
-    if (config.BLOOM) {
-        gl.uniform1i(displayMaterial.uniforms.uBloom,     bloom.attach(1));
-        gl.uniform1i(displayMaterial.uniforms.uDithering, ditheringTexture.attach(2));
-        let scale = getTextureScale(ditheringTexture, width, height);
-        gl.uniform2f(displayMaterial.uniforms.ditherScale, scale.x, scale.y);
-    }
-    if (config.SUNRAYS)
-        gl.uniform1i(displayMaterial.uniforms.uSunrays, sunrays.attach(3));
+    // right = normalize((-fz, 0, fx))  [forward × worldUp]
+    const rLen = Math.sqrt(fz*fz + fx*fx) || 1e-6;
+    const rx = -fz/rLen, ry = 0.0, rz = fx/rLen;
+
+    // up = cross(right, forward)
+    const ux = ry*fz - rz*fy;
+    const uy = rz*fx - rx*fz;
+    const uz = rx*fy - ry*fx;
+
+    return { eye: [ex, ey, ez], fwd: [fx, fy, fz], right: [rx, ry, rz], up: [ux, uy, uz] };
+}
+
+// Draw the density volume using ray marching.
+function drawRayMarch (target) {
+    const width  = target == null ? gl.drawingBufferWidth  : target.width;
+    const height = target == null ? gl.drawingBufferHeight : target.height;
+    const aspect = width / height;
+
+    const { eye, fwd, right, up } = getCameraBasis();
+    const tanHalfFov = Math.tan(Math.PI / 6.0); // 60° FoV
+
+    // Fixed key-light from upper-left-front
+    const lx = 0.4, ly = 0.8, lz = 0.45;
+    const lLen = Math.sqrt(lx*lx + ly*ly + lz*lz);
+
+    rayMarchProgram.bind();
+    gl.uniform3fv(rayMarchProgram.uniforms.uCameraPos,     eye);
+    gl.uniform3fv(rayMarchProgram.uniforms.uCameraForward, fwd);
+    gl.uniform3fv(rayMarchProgram.uniforms.uCameraRight,   right);
+    gl.uniform3fv(rayMarchProgram.uniforms.uCameraUp,      up);
+    gl.uniform1f(rayMarchProgram.uniforms.uTanHalfFov,     tanHalfFov);
+    gl.uniform1f(rayMarchProgram.uniforms.uAspect,         aspect);
+    gl.uniform1i(rayMarchProgram.uniforms.uDensity,        density.read.attach(0));
+    gl.uniform1i(rayMarchProgram.uniforms.uTemperature,    temperature.read.attach(1));
+    gl.uniform3f(rayMarchProgram.uniforms.uLightDir,       lx/lLen, ly/lLen, lz/lLen);
+    gl.uniform3f(rayMarchProgram.uniforms.uLightColor,     1.0, 0.95, 0.88);
+    gl.uniform1f(rayMarchProgram.uniforms.uDensityScale,   config.DENSITY_SCALE);
+    gl.uniform1f(rayMarchProgram.uniforms.uAbsorption,     config.ABSORPTION);
     blit(target);
 }
 
-function applyBloom (source, destination) {
-    if (bloomFramebuffers.length < 2) return;
+// ── 3D Smoke emitter ──────────────────────────────────────────────────────────
 
-    let last = destination;
+// Fixed emitter definitions: {x, y, z} in [0,1]³ volume coordinates.
+const EMITTERS = [
+    { x: 0.5, y: 0.08, z: 0.5 },   // single source at the bottom-centre
+];
 
-    gl.disable(gl.BLEND);
-    bloomPrefilterProgram.bind();
-    let knee   = config.BLOOM_THRESHOLD * config.BLOOM_SOFT_KNEE + 0.0001;
-    let curve0 = config.BLOOM_THRESHOLD - knee;
-    let curve1 = knee * 2;
-    let curve2 = 0.25 / knee;
-    gl.uniform3f(bloomPrefilterProgram.uniforms.curve, curve0, curve1, curve2);
-    gl.uniform1f(bloomPrefilterProgram.uniforms.threshold, config.BLOOM_THRESHOLD);
-    gl.uniform1i(bloomPrefilterProgram.uniforms.uTexture, source.attach(0));
-    blit(last);
+const EMIT_RADIUS      = 0.003;  // Gaussian σ² (tight point source)
+const EMIT_VELOCITY_Y  = 0.35;   // initial upward speed (domain units / second)
+const EMIT_TEMPERATURE = 0.4;    // injected heat per frame
+const EMIT_DENSITY     = 0.28;   // injected brightness per frame (low to avoid saturation)
 
-    bloomBlurProgram.bind();
-    for (let i = 0; i < bloomFramebuffers.length; i++) {
-        let dest = bloomFramebuffers[i];
-        gl.uniform2f(bloomBlurProgram.uniforms.texelSize, last.texelSizeX, last.texelSizeY);
-        gl.uniform1i(bloomBlurProgram.uniforms.uTexture,  last.attach(0));
-        blit(dest);
-        last = dest;
-    }
-
-    gl.blendFunc(gl.ONE, gl.ONE);
-    gl.enable(gl.BLEND);
-    for (let i = bloomFramebuffers.length - 2; i >= 0; i--) {
-        let baseTex = bloomFramebuffers[i];
-        gl.uniform2f(bloomBlurProgram.uniforms.texelSize, last.texelSizeX, last.texelSizeY);
-        gl.uniform1i(bloomBlurProgram.uniforms.uTexture,  last.attach(0));
-        gl.viewport(0, 0, baseTex.width, baseTex.height);
-        blit(baseTex);
-        last = baseTex;
-    }
-
-    gl.disable(gl.BLEND);
-    bloomFinalProgram.bind();
-    gl.uniform2f(bloomFinalProgram.uniforms.texelSize, last.texelSizeX, last.texelSizeY);
-    gl.uniform1i(bloomFinalProgram.uniforms.uTexture,  last.attach(0));
-    gl.uniform1f(bloomFinalProgram.uniforms.intensity, config.BLOOM_INTENSITY);
-    blit(destination);
-}
-
-function applySunrays (source, mask, destination) {
-    gl.disable(gl.BLEND);
-    sunraysMaskProgram.bind();
-    gl.uniform1i(sunraysMaskProgram.uniforms.uTexture, source.attach(0));
-    blit(mask);
-
-    sunraysProgram.bind();
-    gl.uniform1f(sunraysProgram.uniforms.weight,   config.SUNRAYS_WEIGHT);
-    gl.uniform1i(sunraysProgram.uniforms.uTexture, mask.attach(0));
-    blit(destination);
-}
-
-function blur (target, temp, iterations) {
-    blurProgram.bind();
-    for (let i = 0; i < iterations; i++) {
-        gl.uniform2f(blurProgram.uniforms.texelSize, target.texelSizeX, 0.0);
-        gl.uniform1i(blurProgram.uniforms.uTexture,  target.attach(0));
-        blit(temp);
-
-        gl.uniform2f(blurProgram.uniforms.texelSize, 0.0, target.texelSizeY);
-        gl.uniform1i(blurProgram.uniforms.uTexture,  temp.attach(0));
-        blit(target);
-    }
-}
-
-// ── Smoke seeding ─────────────────────────────────────────────────────────────
-// Phase 1 placeholder: random splats seed the density atlas so there is visible
-// output while the 2D shaders are still running on the atlas texture.
-// Phase 2 will replace this with a fixed 3D emitter using atlas coordinates.
-
+// Called once at start and by the "re-emit smoke" GUI button.
 function initSmoke () {
-    for (let i = 0; i < 5; i++) {
-        const color = generateColor();
-        color.r *= 10.0;
-        color.g *= 10.0;
-        color.b *= 10.0;
-        splat(
-            Math.random(),
-            Math.random(),
-            500 * (Math.random() - 0.5),
-            500 * (Math.random() - 0.5),
-            color
-        );
-    }
+    EMITTERS.forEach(e => {
+        // Inject a burst of density and temperature to seed the volume.
+        splat3D(e.x, e.y, e.z, EMIT_DENSITY, EMIT_DENSITY, EMIT_DENSITY,
+                EMIT_RADIUS * 4.0, density);
+        splat3D(e.x, e.y, e.z, EMIT_TEMPERATURE * 2.0, 0.0, 0.0,
+                EMIT_RADIUS * 4.0, temperature);
+        splat3D(e.x, e.y, e.z, 0.0, EMIT_VELOCITY_Y, 0.0,
+                EMIT_RADIUS * 4.0, velocity3D);
+    });
 }
 
-function splat (x, y, dx, dy, color) {
-    splatProgram.bind();
-    gl.uniform1i(splatProgram.uniforms.uTarget,     velocity3D.read.attach(0));
-    gl.uniform1f(splatProgram.uniforms.aspectRatio, canvas.width / canvas.height);
-    gl.uniform2f(splatProgram.uniforms.point,       x, y);
-    gl.uniform3f(splatProgram.uniforms.color,       dx, dy, 0.0);
-    gl.uniform1f(splatProgram.uniforms.radius,      correctRadius(config.SPLAT_RADIUS / 100.0));
-    blit(velocity3D.write);
-    velocity3D.swap();
-
-    gl.uniform1i(splatProgram.uniforms.uTarget, density.read.attach(0));
-    gl.uniform3f(splatProgram.uniforms.color,   color.r, color.g, color.b);
-    blit(density.write);
-    density.swap();
+// Called every frame to continuously emit smoke.
+function emitSmoke () {
+    EMITTERS.forEach(e => {
+        splat3D(e.x, e.y, e.z, EMIT_DENSITY, EMIT_DENSITY, EMIT_DENSITY,
+                EMIT_RADIUS, density);
+        splat3D(e.x, e.y, e.z, EMIT_TEMPERATURE, 0.0, 0.0,
+                EMIT_RADIUS, temperature);
+        splat3D(e.x, e.y, e.z, 0.0, EMIT_VELOCITY_Y, 0.0,
+                EMIT_RADIUS, velocity3D);
+    });
 }
 
-function correctRadius (radius) {
-    let aspectRatio = canvas.width / canvas.height;
-    if (aspectRatio > 1) radius *= aspectRatio;
-    return radius;
+// Inject a 3D Gaussian blob into `fbo` (density, temperature, or velocity3D).
+// point – [0,1]³ position;  color – RGB values to add;  radius – σ² in [0,1]³
+function splat3D (px, py, pz, cr, cg, cb, radius, fbo) {
+    splat3DProgram.bind();
+    gl.uniform1i(splat3DProgram.uniforms.uTarget,  fbo.read.attach(0));
+    gl.uniform3f(splat3DProgram.uniforms.uPoint,   px, py, pz);
+    gl.uniform3f(splat3DProgram.uniforms.uColor,   cr, cg, cb);
+    gl.uniform1f(splat3DProgram.uniforms.uRadius,  radius);
+    blit(fbo.write);
+    fbo.swap();
 }
