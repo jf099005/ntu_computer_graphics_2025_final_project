@@ -42,7 +42,6 @@ function update () {
         step(dt);
     }
     render(null);
-    // if (typeof updateParticles === 'function') { updateParticles(); drawParticles(); }
     requestAnimationFrame(update);
 }
 
@@ -155,8 +154,9 @@ function render (target) {
     if (!config.TRANSPARENT)
         drawColor(target, normalizeColor(config.BACK_COLOR));
 
-    // Draw 3D models (opaque, with depth test) before smoke
+    // Draw 3D models and floor (opaque, with depth test) before smoke
     if (typeof drawModels === 'function') drawModels();
+    if (typeof drawFloor  === 'function') drawFloor();
 
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.enable(gl.BLEND);

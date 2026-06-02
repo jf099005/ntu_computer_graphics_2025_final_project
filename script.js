@@ -139,7 +139,7 @@ initSmoke();
 
 // Load F-16 model at world position (-5, -5, 0)
 // Pan camera with WASD / orbit with arrow keys to navigate to it.
-loadGLBModel('f-16.glb', -5, -5, 0);
+loadGLBModel('f-16.glb', 0, 0, -0.5);
 
 let lastUpdateTime = Date.now();
 update();

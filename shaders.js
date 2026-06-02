@@ -391,11 +391,12 @@ function initShaders (gl, ext) {
         #define MAX_STEPS     64
         #define SHADOW_STEPS   3
         #define SHADOW_STEP  0.12
+        #define BOX_RADIUS 0.5
 
         // Slab intersection with the unit smoke cube [-0.5, 0.5]³.
         vec2 intersectBox (vec3 ro, vec3 rd) {
-            vec3 tMin = (-5.0 - ro) / rd;
-            vec3 tMax = ( 5.0 - ro) / rd;
+            vec3 tMin = (-BOX_RADIUS - ro) / rd;
+            vec3 tMax = ( BOX_RADIUS - ro) / rd;
             vec3 t1   = min(tMin, tMax);
             vec3 t2   = max(tMin, tMax);
             return vec2(max(max(t1.x, t1.y), t1.z),
@@ -411,38 +412,10 @@ function initShaders (gl, ext) {
                 ndc.y * uTanHalfFov * uCameraUp
             );
 
-            // ── Floor plane at y = -0.5, extends ±2 units in x/z ───────────
-            // Warm amber checkerboard: two shades, fade to edge
-            vec3  floorCol = vec3(0.0);
-            bool  hasFloor = false;
-            float tFloor   = 1e9;
-
-            if (abs(rayDir.y) > 1e-5) {
-                float tf = (-0.5 - uCameraPos.y) / rayDir.y;
-                if (tf > 0.001) {
-                    vec3 fp = uCameraPos + tf * rayDir;
-                    if (abs(fp.x) <= 2.0 && abs(fp.z) <= 2.0) {
-                        float cx    = floor(fp.x * 4.0 + 8.5);
-                        float cz    = floor(fp.z * 4.0 + 8.5);
-                        float check = mod(cx + cz, 2.0);
-                        vec3 fc     = mix(vec3(0.44, 0.32, 0.17),
-                                         vec3(0.64, 0.48, 0.28), check);
-                        float diff  = max(dot(vec3(0.0, 1.0, 0.0), uLightDir), 0.0)
-                                      * 0.75 + 0.25;
-                        float fade  = 1.0 - smoothstep(0.9, 2.0,
-                                          length(fp.xz - uCameraPos.xz * 0.0));
-                        floorCol    = fc * diff * fade;
-                        hasFloor    = true;
-                        tFloor      = tf;
-                    }
-                }
-            }
-
             // ── Volume intersection ─────────────────────────────────────────
             vec2 t = intersectBox(uCameraPos, rayDir);
             if (t.y <= t.x) {
-                // Ray misses smoke — show floor if visible
-                gl_FragColor = hasFloor ? vec4(floorCol, 1.0) : vec4(0.0);
+                gl_FragColor = vec4(0.0);
                 return;
             }
 
@@ -459,7 +432,7 @@ function initShaders (gl, ext) {
                 vec3  pos     = uCameraPos + tSample * rayDir;
 
                 // World [-0.5,0.5]³ → atlas uvw [0,1]³
-                vec3 uvw      = pos + 0.5;
+                vec3 uvw      = pos + BOX_RADIUS;
                 vec4 d        = sampleVolume(uDensity, uvw);
                 float density = length(d.rgb) * uDensityScale;
                 if (density < 0.001) continue;
@@ -468,7 +441,7 @@ function initShaders (gl, ext) {
                 float shadow = 0.0;
                 for (int s = 0; s < SHADOW_STEPS; s++) {
                     vec3 sp = pos + uLightDir * (float(s) + 0.5) * SHADOW_STEP;
-                    shadow += length(sampleVolume(uDensity, sp + 0.5).rgb);
+                    shadow += length(sampleVolume(uDensity, sp + BOX_RADIUS).rgb);
                 }
                 float lightAtten = exp(-shadow * uDensityScale * uAbsorption * SHADOW_STEP);
 
@@ -486,12 +459,6 @@ function initShaders (gl, ext) {
                 transmit   *= 1.0 - alpha;
 
                 if (transmit < 0.01) break;
-            }
-
-            // ── Composite floor behind smoke (box bottom face) ──────────────
-            if (hasFloor && transmit > 0.01 && tFloor <= tEnd + 0.02) {
-                accum.rgb += transmit * floorCol;
-                accum.a   += transmit;
             }
 
             gl_FragColor = vec4(accum.rgb, accum.a);

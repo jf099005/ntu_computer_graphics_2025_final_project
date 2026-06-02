@@ -345,3 +345,138 @@ function drawModels () {
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.enable(gl.BLEND);
 }
+
+// ── 3D Floor Plane ────────────────────────────────────────────────────────────
+// Flat checkerboard quad at y = -0.5, covering x/z ∈ [-2, 2].
+
+let _floorProg = null;
+let _floorGeo  = null;
+
+const _FLOOR_VERT = /*glsl*/`
+    precision highp float;
+    attribute vec3 aPos;
+    uniform mat4 uMVP;
+    varying vec3 vWorldPos;
+    void main() {
+        vWorldPos = aPos;
+        gl_Position = uMVP * vec4(aPos, 1.0);
+    }
+`;
+
+const _FLOOR_FRAG = /*glsl*/`
+    precision highp float;
+    varying vec3 vWorldPos;
+    uniform vec3 uLightDir;
+    void main() {
+        float cx    = floor(vWorldPos.x * 4.0 + 8.5);
+        float cz    = floor(vWorldPos.z * 4.0 + 8.5);
+        float check = mod(cx + cz, 2.0);
+        vec3  fc    = mix(vec3(0.44, 0.32, 0.17), vec3(0.64, 0.48, 0.28), check);
+        float diff  = max(dot(vec3(0.0, 1.0, 0.0), uLightDir), 0.0) * 0.75 + 0.25;
+        float fade  = 1.0 - smoothstep(0.9, 2.0, length(vWorldPos.xz));
+        gl_FragColor = vec4(fc * diff * fade, 1.0);
+    }
+`;
+
+function _buildFloorProgram () {
+    const vs = gl.createShader(gl.VERTEX_SHADER);
+    gl.shaderSource(vs, _FLOOR_VERT);
+    gl.compileShader(vs);
+    if (!gl.getShaderParameter(vs, gl.COMPILE_STATUS))
+        console.error('[floor] vert:', gl.getShaderInfoLog(vs));
+    const fs = gl.createShader(gl.FRAGMENT_SHADER);
+    gl.shaderSource(fs, _FLOOR_FRAG);
+    gl.compileShader(fs);
+    if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS))
+        console.error('[floor] frag:', gl.getShaderInfoLog(fs));
+    const prog = gl.createProgram();
+    gl.bindAttribLocation(prog, 0, 'aPos');
+    gl.attachShader(prog, vs);
+    gl.attachShader(prog, fs);
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS))
+        console.error('[floor] link:', gl.getProgramInfoLog(prog));
+    return {
+        prog,
+        uMVP:      gl.getUniformLocation(prog, 'uMVP'),
+        uLightDir: gl.getUniformLocation(prog, 'uLightDir'),
+    };
+}
+
+function _buildFloorGeometry () {
+    const verts = new Float32Array([
+        -2, -0.5, -2,
+         2, -0.5, -2,
+         2, -0.5,  2,
+        -2, -0.5,  2,
+    ]);
+    const indices = new Uint16Array([0, 1, 2, 0, 2, 3]);
+
+    const vbo = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+    gl.bufferData(gl.ARRAY_BUFFER, verts, gl.STATIC_DRAW);
+
+    const ibo = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
+
+    let vao = null;
+    if (gl.createVertexArray) {
+        vao = gl.createVertexArray();
+        gl.bindVertexArray(vao);
+        gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+        gl.enableVertexAttribArray(0);
+        gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
+        gl.bindVertexArray(null);
+    }
+    return { vao, vbo, ibo };
+}
+
+function drawFloor () {
+    if (!_floorProg) _floorProg = _buildFloorProgram();
+    if (!_floorGeo)  _floorGeo  = _buildFloorGeometry();
+
+    const W = gl.drawingBufferWidth, H = gl.drawingBufferHeight;
+    const aspect = W / H;
+
+    const { eye, fwd, up } = getCameraBasis();
+    const lookAt = [eye[0]+fwd[0], eye[1]+fwd[1], eye[2]+fwd[2]];
+    const view = mat4LookAt(eye, lookAt, up);
+    const proj = mat4Perspective(Math.PI / 3.0, aspect, 0.1, 20.0);
+    const mvp  = mat4Multiply(proj, view);
+
+    gl.viewport(0, 0, W, H);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthFunc(gl.LEQUAL);
+    gl.depthMask(true);
+    gl.disable(gl.CULL_FACE);
+    gl.disable(gl.BLEND);
+
+    gl.useProgram(_floorProg.prog);
+
+    const lx = 0.4, ly = 0.8, lz = 0.45;
+    const lLen = Math.sqrt(lx*lx + ly*ly + lz*lz);
+    gl.uniform3f(_floorProg.uLightDir, lx/lLen, ly/lLen, lz/lLen);
+    gl.uniformMatrix4fv(_floorProg.uMVP, false, mvp);
+
+    if (_floorGeo.vao) {
+        gl.bindVertexArray(_floorGeo.vao);
+    } else {
+        gl.bindBuffer(gl.ARRAY_BUFFER, _floorGeo.vbo);
+        gl.enableVertexAttribArray(0);
+        gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, _floorGeo.ibo);
+    }
+
+    gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
+
+    if (_floorGeo.vao) gl.bindVertexArray(null);
+
+    // Restore state
+    gl.disable(gl.DEPTH_TEST);
+    gl.depthMask(false);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.enable(gl.BLEND);
+}
