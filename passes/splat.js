@@ -9,7 +9,7 @@ const EMITTERS = [
 ];
 
 const EMIT_RADIUS      = 0.003;
-const EMIT_VELOCITY_Y  = 0.35;
+const EMIT_VELOCITY_Y  = 0.05;
 const EMIT_TEMPERATURE = 0.4;
 const EMIT_DENSITY     = 0.28;
 

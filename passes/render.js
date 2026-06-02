@@ -130,7 +130,7 @@ function initRender () {
         #define MAX_STEPS     64
         #define SHADOW_STEPS   3
         #define SHADOW_STEP  0.12
-        #define BOX_RADIUS 0.5
+        #define BOX_RADIUS 5.0
 
         vec2 intersectBox (vec3 ro, vec3 rd) {
             vec3 tMin = (-BOX_RADIUS - ro) / rd;
@@ -177,7 +177,9 @@ function initRender () {
                 float tSample = tStart + (float(i) + 0.5) * stepSize;
                 vec3  pos     = uCameraPos + tSample * rayDir;
 
-                vec3 uvw      = pos + BOX_RADIUS;
+                // vec3 uvw      = pos + BOX_RADIUS;
+                
+                vec3 uvw = (pos + BOX_RADIUS) / (2.0 * BOX_RADIUS);
                 vec4 d        = sampleVolume(uDensity, uvw);
                 float density = length(d.rgb) * uDensityScale;
                 if (density < 0.001) continue;
@@ -185,7 +187,8 @@ function initRender () {
                 float shadow = 0.0;
                 for (int s = 0; s < SHADOW_STEPS; s++) {
                     vec3 sp = pos + uLightDir * (float(s) + 0.5) * SHADOW_STEP;
-                    shadow += length(sampleVolume(uDensity, sp + BOX_RADIUS).rgb);
+                    // shadow += length(sampleVolume(uDensity, sp + BOX_RADIUS).rgb);
+                    shadow += length(sampleVolume(uDensity, (sp + BOX_RADIUS) / (2.0 * BOX_RADIUS)).rgb);
                 }
                 float lightAtten = exp(-shadow * uDensityScale * uAbsorption * SHADOW_STEP);
 
@@ -227,7 +230,6 @@ function render (target) {
     if (typeof drawModelDepthCapture === 'function') drawModelDepthCapture();
 
     if (typeof drawModels === 'function') drawModels();
-    if (typeof drawFloor  === 'function') drawFloor();
 
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.enable(gl.BLEND);

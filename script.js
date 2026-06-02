@@ -13,7 +13,7 @@ let config = {
     PRESSURE_ITERATIONS: 25,
     CURL:                30,
     // Smoke behaviour
-    BUOYANCY:     1.5,
+    BUOYANCY:     0.5,
     SMOKE_WEIGHT: 0.05,
     // Seed splat radius (used by initSmoke, not exposed in GUI)
     SPLAT_RADIUS: 0.25,
@@ -106,6 +106,7 @@ const camera = {
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 initFramebuffers();
 initSmoke();
+createFloor();
 
 loadGLBModel('f-16.glb', 0, 0, -0.5);
 
