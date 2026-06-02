@@ -6,6 +6,8 @@
 
 const _models = [];
 let _modelProg = null;
+let _modelDepthCaptureProg = null;
+let _modelScreenFBO = null;
 
 const _MODEL_VERT = /*glsl*/`
     precision highp float;
@@ -39,6 +41,57 @@ const _MODEL_FRAG = /*glsl*/`
         gl_FragColor = vec4(uColor * diff + vec3(spec), 1.0);
     }
 `;
+
+// Same lighting as _MODEL_FRAG but writes eye-distance into alpha for ray-march occlusion.
+const _MODEL_DEPTH_FRAG = /*glsl*/`
+    precision highp float;
+    varying vec3 vN;
+    varying vec3 vW;
+    uniform vec3 uEye;
+    uniform vec3 uColor;
+    void main() {
+        vec3 N = normalize(vN);
+        vec3 L = normalize(vec3(0.4, 0.8, 0.45));
+        vec3 V = normalize(uEye - vW);
+        vec3 H = normalize(L + V);
+        float diff = max(dot(N, L), 0.0) * 0.7 + 0.3;
+        float spec = pow(max(dot(N, H), 0.0), 48.0) * 0.4;
+        vec3 litColor = uColor * diff + vec3(spec);
+        float depth   = length(vW - uEye);
+        gl_FragColor  = vec4(litColor, depth);
+    }
+`;
+
+function _buildModelDepthCaptureProgram () {
+    const vs = gl.createShader(gl.VERTEX_SHADER);
+    gl.shaderSource(vs, _MODEL_VERT);
+    gl.compileShader(vs);
+    if (!gl.getShaderParameter(vs, gl.COMPILE_STATUS))
+        console.error('[model] depth vert:', gl.getShaderInfoLog(vs));
+
+    const fs = gl.createShader(gl.FRAGMENT_SHADER);
+    gl.shaderSource(fs, _MODEL_DEPTH_FRAG);
+    gl.compileShader(fs);
+    if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS))
+        console.error('[model] depth frag:', gl.getShaderInfoLog(fs));
+
+    const prog = gl.createProgram();
+    gl.bindAttribLocation(prog, 0, 'aPos');
+    gl.bindAttribLocation(prog, 1, 'aNorm');
+    gl.attachShader(prog, vs);
+    gl.attachShader(prog, fs);
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS))
+        console.error('[model] depth link:', gl.getProgramInfoLog(prog));
+
+    return {
+        prog,
+        uMVP:   gl.getUniformLocation(prog, 'uMVP'),
+        uMod:   gl.getUniformLocation(prog, 'uMod'),
+        uEye:   gl.getUniformLocation(prog, 'uEye'),
+        uColor: gl.getUniformLocation(prog, 'uColor'),
+    };
+}
 
 function _buildModelProgram () {
     const vs = gl.createShader(gl.VERTEX_SHADER);
@@ -480,3 +533,126 @@ function drawFloor () {
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.enable(gl.BLEND);
 }
+
+function initModelDepthBuffer () {
+    const W = gl.drawingBufferWidth, H = gl.drawingBufferHeight;
+    if (_modelScreenFBO && _modelScreenFBO.width === W && _modelScreenFBO.height === H) return;
+
+    if (!_modelDepthCaptureProg) _modelDepthCaptureProg = _buildModelDepthCaptureProgram();
+
+    if (_modelScreenFBO) {
+        gl.deleteFramebuffer(_modelScreenFBO.fbo);
+        gl.deleteTexture(_modelScreenFBO.texture);
+        gl.deleteRenderbuffer(_modelScreenFBO.depthRB);
+    }
+
+    const rgba    = ext.formatRGBA;
+    const texType = ext.halfFloatTexType;
+
+    const texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, rgba.internalFormat, W, H, 0, rgba.format, texType, null);
+
+    const depthRB = gl.createRenderbuffer();
+    gl.bindRenderbuffer(gl.RENDERBUFFER, depthRB);
+    gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, W, H);
+
+    const fbo = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depthRB);
+    if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE)
+        console.error('[model] depth capture FBO incomplete');
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+    _modelScreenFBO = {
+        fbo, texture, depthRB, width: W, height: H,
+        attach (id) {
+            gl.activeTexture(gl.TEXTURE0 + id);
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+            return id;
+        }
+    };
+}
+
+// Render all models into _modelScreenFBO: RGB = lit colour, A = eye-distance.
+// Alpha = 0 (clear) means no model at that pixel.
+function drawModelDepthCapture () {
+    initModelDepthBuffer();
+
+    const { eye, fwd, up } = getCameraBasis();
+    const W = _modelScreenFBO.width, H = _modelScreenFBO.height;
+    const aspect = W / H;
+    const lookAt = [eye[0]+fwd[0], eye[1]+fwd[1], eye[2]+fwd[2]];
+    const view   = mat4LookAt(eye, lookAt, up);
+    const proj   = mat4Perspective(Math.PI / 3.0, aspect, 0.1, 20.0);
+    const vp     = mat4Multiply(proj, view);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, _modelScreenFBO.fbo);
+    gl.viewport(0, 0, W, H);
+    gl.clearColor(0.0, 0.0, 0.0, 0.0);  // A=0 → no model
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthFunc(gl.LEQUAL);
+    gl.depthMask(true);
+    gl.enable(gl.CULL_FACE);
+    gl.cullFace(gl.BACK);
+    gl.disable(gl.BLEND);
+
+    if (_models.length > 0) {
+        gl.useProgram(_modelDepthCaptureProg.prog);
+        gl.uniform3fv(_modelDepthCaptureProg.uEye, new Float32Array(eye));
+
+        for (const model of _models) {
+            const worldXform = mat4Multiply(
+                _mat4T(...model.position),
+                mat4Multiply(_mat4S(model.scale), _mat4T(-model.center[0], -model.center[1], -model.center[2]))
+            );
+            for (const prim of model.primitives) {
+                const modMat = mat4Multiply(worldXform, prim.nodeMatrix);
+                const mvp    = mat4Multiply(vp, modMat);
+
+                gl.uniformMatrix4fv(_modelDepthCaptureProg.uMVP, false, mvp);
+                gl.uniformMatrix4fv(_modelDepthCaptureProg.uMod, false, modMat);
+                gl.uniform3fv(_modelDepthCaptureProg.uColor, new Float32Array(prim.baseColor));
+
+                if (prim.vao) {
+                    gl.bindVertexArray(prim.vao);
+                } else {
+                    gl.bindBuffer(gl.ARRAY_BUFFER, prim.posBuf);
+                    gl.enableVertexAttribArray(0);
+                    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+                    if (prim.normBuf) {
+                        gl.bindBuffer(gl.ARRAY_BUFFER, prim.normBuf);
+                        gl.enableVertexAttribArray(1);
+                        gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 0, 0);
+                    } else {
+                        gl.disableVertexAttribArray(1);
+                        gl.vertexAttrib3f(1, 0, 1, 0);
+                    }
+                    if (prim.idxBuf) gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, prim.idxBuf);
+                }
+
+                if (prim.idxBuf)
+                    gl.drawElements(gl.TRIANGLES, prim.idxCount, prim.idxType, 0);
+                else
+                    gl.drawArrays(gl.TRIANGLES, 0, prim.posCount);
+
+                if (prim.vao) gl.bindVertexArray(null);
+            }
+        }
+    }
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.disable(gl.DEPTH_TEST);
+    gl.depthMask(false);
+    gl.disable(gl.CULL_FACE);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.enable(gl.BLEND);
+}
+
+function getModelScreenFBO () { return _modelScreenFBO; }

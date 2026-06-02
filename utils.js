@@ -166,3 +166,5 @@ function getCameraViewProjection (theta, phi, radius, aspect) {
     const proj = mat4Perspective(Math.PI / 3.0, aspect, 0.1, 10.0);
     return mat4Multiply(proj, view);
 }
+
+//depth calculation 

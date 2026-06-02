@@ -5,53 +5,42 @@ resizeCanvas();
 
 let config = {
     // Smoke dissipation (decay rate per second)
-    DENSITY_DISSIPATION: 0.3,
-    VELOCITY_DISSIPATION: 0.2,
+    DENSITY_DISSIPATION:     0.3,
+    VELOCITY_DISSIPATION:    0.2,
     TEMPERATURE_DISSIPATION: 1.0,
     // Fluid solver
-    PRESSURE: 0.8,
+    PRESSURE:            0.8,
     PRESSURE_ITERATIONS: 25,
-    CURL: 30,
+    CURL:                30,
     // Smoke behaviour
-    BUOYANCY: 1.5,
-    SMOKE_WEIGHT: 0.05,    // downward drag per unit density (counters buoyancy)
+    BUOYANCY:     1.5,
+    SMOKE_WEIGHT: 0.05,
     // Seed splat radius (used by initSmoke, not exposed in GUI)
     SPLAT_RADIUS: 0.25,
     // Ray march rendering
-    DENSITY_SCALE: 0.7,    // density multiplier during ray marching
-    ABSORPTION: 15.0,      // opacity per unit distance
+    DENSITY_SCALE: 0.7,
+    ABSORPTION:    15.0,
     // Display
-    PAUSED: false,
+    PAUSED:     false,
     BACK_COLOR: { r: 8, g: 15, b: 40 },
     TRANSPARENT: false,
 };
 
 const { gl, ext } = getWebGLContext(canvas);
 
-// (Bloom / sunrays removed — rendering uses ray marching)
-
 startGUI();
 
-// Compiled shaders
-const {
-    baseVertexShader,
-    clearShader,
-    colorShader,
-    displayShaderSource,
-    displayVertexShader,
-    atlasHelperGLSL,
-    // 3D shaders
-    advection3DShader,
-    divergence3DShader,
-    pressure3DShader,
-    gradientSubtract3DShader,
-    curl3DShader,
-    vorticity3DShader,
-    splat3DShader,
-    buoyancyShader,
-    rayMarchShader,
-} = initShaders(gl, ext);
+// ── Initialise all functional modules (requires gl to exist) ──────────────────
+initBaseShaders();   // shaders.js  – shared baseVertexShader
+initDivergence();    // divergence.js
+initCurl();          // curl.js
+initPressure();      // pressure.js
+initAdvection();     // advection.js
+initBuoyancy();      // buoyancy.js
+initSplat();         // splat.js
+initRender();        // render.js
 
+// ── Full-screen quad blit helper ──────────────────────────────────────────────
 const blit = (() => {
     const vb = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, vb);
@@ -60,7 +49,7 @@ const blit = (() => {
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array([0, 1, 2, 0, 2, 3]), gl.STATIC_DRAW);
 
-    // Use a VAO (WebGL 2) so model drawing cannot clobber these attribs
+    // VAO (WebGL 2) so model drawing cannot clobber these attribs
     let blitVAO = null;
     if (gl.createVertexArray) {
         blitVAO = gl.createVertexArray();
@@ -94,51 +83,30 @@ const blit = (() => {
 })();
 
 // ── 3D atlas FBO state ────────────────────────────────────────────────────────
-// All buffers use ATLAS_SIZE × ATLAS_SIZE (512×512) to store the 64³ volume
-// as an 8×8 grid of 64×64 slices.
+let density;       // RGBA – smoke colour + alpha
+let velocity3D;    // RGBA – XYZ velocity in RGB
+let temperature;   // R    – temperature field
+let divergence3D;  // R    – divergence
+let curl3D;        // RGBA – vorticity vector field
+let pressure3D;    // R    – pressure
 
-let density;      // RGBA  – smoke colour + alpha   (replaces dye)
-let velocity3D;   // RGBA  – XYZ velocity in RGB    (replaces velocity)
-let temperature;  // R     – temperature field for buoyancy (new)
-let divergence3D; // R     – divergence             (replaces divergence)
-let curl3D;       // R     – vorticity scalar        (replaces curl)
-let pressure3D;   // R     – pressure               (replaces pressure)
+let modeldepth3D;  // R    – model depth buffer
+let modelcolor3D;  // RGBA – model colour buffer
 
-// Simulation programs (3D only)
-const clearProgram           = new Program(baseVertexShader, clearShader);
-const colorProgram           = new Program(baseVertexShader, colorShader);
-
-// 3D simulation programs
-const advection3DProgram       = new Program(baseVertexShader, advection3DShader);
-const divergence3DProgram      = new Program(baseVertexShader, divergence3DShader);
-const pressure3DProgram        = new Program(baseVertexShader, pressure3DShader);
-const gradientSubtract3DProgram= new Program(baseVertexShader, gradientSubtract3DShader);
-const curl3DProgram            = new Program(baseVertexShader, curl3DShader);
-const vorticity3DProgram       = new Program(baseVertexShader, vorticity3DShader);
-const splat3DProgram           = new Program(baseVertexShader, splat3DShader);
-const buoyancyProgram          = new Program(baseVertexShader, buoyancyShader);
-const rayMarchProgram          = new Program(baseVertexShader, rayMarchShader);
-
-const displayMaterial = new Material(displayVertexShader, displayShaderSource);
-
-// ── Orbit camera state ────────────────────────────────────────────────────────
-// theta = horizontal azimuth (radians), phi = vertical elevation (radians).
-// Controlled by arrow keys (input.js). Used by drawDisplay to build the MVP.
+// ── Orbit camera ──────────────────────────────────────────────────────────────
 const camera = {
     theta:  0.0,
-    phi:    0.3,   // slight upward tilt so the quad isn't exactly face-on
+    phi:    0.3,
     radius: 2.0,
-    cx: 0.0,       // orbit center world-space offset
+    cx: 0.0,
     cy: 0.0,
     cz: 0.0,
 };
 
-// Bootstrap
+// ── Bootstrap ─────────────────────────────────────────────────────────────────
 initFramebuffers();
 initSmoke();
 
-// Load F-16 model at world position (-5, -5, 0)
-// Pan camera with WASD / orbit with arrow keys to navigate to it.
 loadGLBModel('f-16.glb', 0, 0, -0.5);
 
 let lastUpdateTime = Date.now();
