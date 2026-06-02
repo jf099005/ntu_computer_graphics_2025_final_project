@@ -1,7 +1,7 @@
 'use strict';
 
 function getWebGLContext (canvas) {
-    const params = { alpha: true, depth: false, stencil: false, antialias: false, preserveDrawingBuffer: false };
+    const params = { alpha: true, depth: true, stencil: false, antialias: false, preserveDrawingBuffer: false };
 
     let gl = canvas.getContext('webgl2', params);
     const isWebGL2 = !!gl;

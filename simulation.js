@@ -42,6 +42,7 @@ function update () {
         step(dt);
     }
     render(null);
+    // if (typeof updateParticles === 'function') { updateParticles(); drawParticles(); }
     requestAnimationFrame(update);
 }
 
@@ -154,6 +155,9 @@ function render (target) {
     if (!config.TRANSPARENT)
         drawColor(target, normalizeColor(config.BACK_COLOR));
 
+    // Draw 3D models (opaque, with depth test) before smoke
+    if (typeof drawModels === 'function') drawModels();
+
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.enable(gl.BLEND);
     drawRayMarch(target);
@@ -185,7 +189,12 @@ function getCameraBasis () {
     const uy = rz*fx - rx*fz;
     const uz = rx*fy - ry*fx;
 
-    return { eye: [ex, ey, ez], fwd: [fx, fy, fz], right: [rx, ry, rz], up: [ux, uy, uz] };
+    return {
+        eye:   [ex + camera.cx, ey + camera.cy, ez + camera.cz],
+        fwd:   [fx, fy, fz],
+        right: [rx, ry, rz],
+        up:    [ux, uy, uz],
+    };
 }
 
 // Draw the density volume using ray marching.
@@ -222,6 +231,7 @@ function drawRayMarch (target) {
 // Fixed emitter definitions: {x, y, z} in [0,1]³ volume coordinates.
 const EMITTERS = [
     { x: 0.5, y: 0.08, z: 0.5 },   // single source at the bottom-centre
+    { x: -0.5, y: 0.08, z: 0.5 },   // another source at the bottom-centre
 ];
 
 const EMIT_RADIUS      = 0.003;  // Gaussian σ² (tight point source)

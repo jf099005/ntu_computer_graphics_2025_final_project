@@ -22,7 +22,7 @@ let config = {
     ABSORPTION: 15.0,      // opacity per unit distance
     // Display
     PAUSED: false,
-    BACK_COLOR: { r: 255, g: 255, b: 255 },
+    BACK_COLOR: { r: 8, g: 15, b: 40 },
     TRANSPARENT: false,
 };
 
@@ -53,14 +53,30 @@ const {
 } = initShaders(gl, ext);
 
 const blit = (() => {
-    gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+    const vb = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, vb);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, -1, 1, 1, 1, 1, -1]), gl.STATIC_DRAW);
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.createBuffer());
+    const ib = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array([0, 1, 2, 0, 2, 3]), gl.STATIC_DRAW);
-    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-    gl.enableVertexAttribArray(0);
+
+    // Use a VAO (WebGL 2) so model drawing cannot clobber these attribs
+    let blitVAO = null;
+    if (gl.createVertexArray) {
+        blitVAO = gl.createVertexArray();
+        gl.bindVertexArray(blitVAO);
+        gl.bindBuffer(gl.ARRAY_BUFFER, vb);
+        gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(0);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
+        gl.bindVertexArray(null);
+    } else {
+        gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(0);
+    }
 
     return (target, clear = false) => {
+        if (blitVAO) gl.bindVertexArray(blitVAO);
         if (target == null) {
             gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
             gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -73,6 +89,7 @@ const blit = (() => {
             gl.clear(gl.COLOR_BUFFER_BIT);
         }
         gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
+        if (blitVAO) gl.bindVertexArray(null);
     };
 })();
 
@@ -111,11 +128,18 @@ const camera = {
     theta:  0.0,
     phi:    0.3,   // slight upward tilt so the quad isn't exactly face-on
     radius: 2.0,
+    cx: 0.0,       // orbit center world-space offset
+    cy: 0.0,
+    cz: 0.0,
 };
 
 // Bootstrap
 initFramebuffers();
 initSmoke();
+
+// Load F-16 model at world position (-5, -5, 0)
+// Pan camera with WASD / orbit with arrow keys to navigate to it.
+loadGLBModel('f-16.glb', -5, -5, 0);
 
 let lastUpdateTime = Date.now();
 update();
