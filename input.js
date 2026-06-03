@@ -1,13 +1,17 @@
 'use strict';
 
-// Keyboard controls:
+// FPS-style controls:
 //   P          – toggle pause
-//   WASD       – translate camera (based on current horizontal view direction)
-//   ← / →     – orbit camera horizontally (azimuth)
-//   ↑ / ↓     – orbit camera vertically (elevation, clamped ±80°)
+//   WASD       – move camera position (based on current view direction)
+//   Mouse      – look around (adjust view angle)
 
 // speeds from config.js
 const PHI_LIMIT = Math.PI * 0.44; // ~79° – prevents gimbal lock near poles
+
+// Mouse sensitivity for FPS-style look
+const MOUSE_SENSITIVITY = 0.002;
+let lastMouseX = 0;
+let lastMouseY = 0;
 
 window.addEventListener('keydown', e => {
     switch (e.code) {
@@ -15,7 +19,7 @@ window.addEventListener('keydown', e => {
             config.PAUSED = !config.PAUSED;
             break;
 
-        // WASD: translate orbit center in horizontal plane aligned with current azimuth
+        // WASD: move camera position in horizontal plane aligned with current view direction
         case 'KeyW':
         case 'KeyS':
         case 'KeyA':
@@ -33,22 +37,23 @@ window.addEventListener('keydown', e => {
             e.preventDefault();
             break;
         }
+    }
+});
 
-        case 'ArrowLeft':
-            camera.theta -= config.CAMERA_KEY_SPEED;
-            e.preventDefault();
-            break;
-        case 'ArrowRight':
-            camera.theta += config.CAMERA_KEY_SPEED;
-            e.preventDefault();
-            break;
-        case 'ArrowUp':
-            camera.phi = Math.min(camera.phi + config.CAMERA_KEY_SPEED, PHI_LIMIT);
-            e.preventDefault();
-            break;
-        case 'ArrowDown':
-            camera.phi = Math.max(camera.phi - config.CAMERA_KEY_SPEED, -PHI_LIMIT);
-            e.preventDefault();
-            break;
+// Mouse movement for FPS-style camera control (right button only)
+window.addEventListener('mousemove', e => {
+    const deltaX = e.clientX - lastMouseX;
+    const deltaY = e.clientY - lastMouseY;
+
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
+
+    // Only adjust view when right mouse button is pressed
+    if (e.buttons & 2) {
+        // Update horizontal angle (theta) based on horizontal mouse movement
+        camera.theta += deltaX * MOUSE_SENSITIVITY;
+
+        // Update vertical angle (phi) based on vertical mouse movement, clamped to prevent flipping
+        camera.phi = Math.max(-PHI_LIMIT, Math.min(PHI_LIMIT, camera.phi + deltaY * MOUSE_SENSITIVITY));
     }
 });

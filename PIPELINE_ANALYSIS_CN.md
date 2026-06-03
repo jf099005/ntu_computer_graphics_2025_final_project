@@ -444,28 +444,58 @@ function render(target) {
 
 ```javascript
 const camera = {
-    theta: 0.0,      // 水平旋转角度（弧度）
-    phi: 0.3,        // 竖直旋转角度
-    radius: 2.0      // 距离原点的距离
+    // position
+    x: config.CAMERA_CX,
+    y: config.CAMERA_CY,
+    z: config.CAMERA_CZ + config.CAMERA_RADIUS,
+
+    // view direction
+    yaw: config.CAMERA_THETA,
+    pitch: config.CAMERA_PHI,
+
+    moveSpeed: 0.08,
+    mouseSensitivity: 0.002,
 };
 ```
 
 #### 建立摄像机坐标系
 
 ```javascript
+function normalize3(v) {
+    const len = Math.hypot(v[0], v[1], v[2]) || 1.0;
+    return [v[0] / len, v[1] / len, v[2] / len];
+}
+
+function cross3(a, b) {
+    return [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ];
+}
+
 function getCameraBasis() {
-    const th = camera.theta, ph = camera.phi, r = camera.radius;
-    
-    // 从球面坐标转笛卡尔坐标
-    const ex = r * Math.sin(th) * Math.cos(ph);
-    const ey = r * Math.sin(ph);
-    const ez = r * Math.cos(th) * Math.cos(ph);
-    
-    // 建立正交基 { right, up, forward }
-    const fwd = normalize(origin - eye);     // 前向
-    const right = normalize(fwd × worldUp);  // 右向
-    const up = right × fwd;                  // 上向
-    
+    const yaw = camera.yaw;
+    const pitch = camera.pitch;
+
+    const cp = Math.cos(pitch);
+    const sp = Math.sin(pitch);
+    const sy = Math.sin(yaw);
+    const cy = Math.cos(yaw);
+
+    // yaw = 0 時看向 -Z
+    const fwd = normalize3([
+        -sy * cp,
+         sp,
+        -cy * cp,
+    ]);
+
+    const worldUp = [0, 1, 0];
+    const right = normalize3(cross3(fwd, worldUp));
+    const up = normalize3(cross3(right, fwd));
+
+    const eye = [camera.x, camera.y, camera.z];
+
     return { eye, fwd, right, up };
 }
 ```
