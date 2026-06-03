@@ -432,7 +432,7 @@ function drawModels (targetFBO) {
     const view   = mat4LookAt(eye, lookAt, up);
     const proj   = mat4Perspective(config.CAMERA_FOV * Math.PI / 180, W / H, 0.1, 20.0);
     const vp     = mat4Multiply(proj, view);
-    // const vp = proj;
+
     gl.viewport(0, 0, W, H);
     gl.bindFramebuffer(gl.FRAMEBUFFER, targetFBO ? targetFBO.fbo : null);
     gl.enable(gl.DEPTH_TEST);
