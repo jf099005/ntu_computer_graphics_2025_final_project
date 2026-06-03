@@ -64,6 +64,7 @@ function update () {
         step(dt);
     }
     render(null);
+    updateCameraHUD();
     requestAnimationFrame(update);
 }
 

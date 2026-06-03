@@ -6,9 +6,8 @@
 //   ← / →     – orbit camera horizontally (azimuth)
 //   ↑ / ↓     – orbit camera vertically (elevation, clamped ±80°)
 
-const CAMERA_SPEED = 0.05; // radians per key event
-const MOVE_SPEED   = 0.05; // world units per key event
-const PHI_LIMIT    = Math.PI * 0.44; // ~79° – prevents gimbal lock near poles
+// speeds from config.js
+const PHI_LIMIT = Math.PI * 0.44; // ~79° – prevents gimbal lock near poles
 
 window.addEventListener('keydown', e => {
     switch (e.code) {
@@ -27,28 +26,28 @@ window.addEventListener('keydown', e => {
             // horizontal right: perpendicular to forward, in XZ plane
             const rhx =  Math.cos(th), rhz = -Math.sin(th);
 
-            if (e.code === 'KeyW') { camera.cx += fhx * MOVE_SPEED; camera.cz += fhz * MOVE_SPEED; }
-            if (e.code === 'KeyS') { camera.cx -= fhx * MOVE_SPEED; camera.cz -= fhz * MOVE_SPEED; }
-            if (e.code === 'KeyA') { camera.cx -= rhx * MOVE_SPEED; camera.cz -= rhz * MOVE_SPEED; }
-            if (e.code === 'KeyD') { camera.cx += rhx * MOVE_SPEED; camera.cz += rhz * MOVE_SPEED; }
+            if (e.code === 'KeyW') { camera.cx += fhx * config.CAMERA_MOVE_SPEED; camera.cz += fhz * config.CAMERA_MOVE_SPEED; }
+            if (e.code === 'KeyS') { camera.cx -= fhx * config.CAMERA_MOVE_SPEED; camera.cz -= fhz * config.CAMERA_MOVE_SPEED; }
+            if (e.code === 'KeyA') { camera.cx -= rhx * config.CAMERA_MOVE_SPEED; camera.cz -= rhz * config.CAMERA_MOVE_SPEED; }
+            if (e.code === 'KeyD') { camera.cx += rhx * config.CAMERA_MOVE_SPEED; camera.cz += rhz * config.CAMERA_MOVE_SPEED; }
             e.preventDefault();
             break;
         }
 
         case 'ArrowLeft':
-            camera.theta -= CAMERA_SPEED;
+            camera.theta -= config.CAMERA_KEY_SPEED;
             e.preventDefault();
             break;
         case 'ArrowRight':
-            camera.theta += CAMERA_SPEED;
+            camera.theta += config.CAMERA_KEY_SPEED;
             e.preventDefault();
             break;
         case 'ArrowUp':
-            camera.phi = Math.min(camera.phi + CAMERA_SPEED, PHI_LIMIT);
+            camera.phi = Math.min(camera.phi + config.CAMERA_KEY_SPEED, PHI_LIMIT);
             e.preventDefault();
             break;
         case 'ArrowDown':
-            camera.phi = Math.max(camera.phi - CAMERA_SPEED, -PHI_LIMIT);
+            camera.phi = Math.max(camera.phi - config.CAMERA_KEY_SPEED, -PHI_LIMIT);
             e.preventDefault();
             break;
     }

@@ -3,28 +3,7 @@
 const canvas = document.getElementsByTagName('canvas')[0];
 resizeCanvas();
 
-let config = {
-    // Smoke dissipation (decay rate per second)
-    DENSITY_DISSIPATION:     0.3,
-    VELOCITY_DISSIPATION:    0.2,
-    TEMPERATURE_DISSIPATION: 1.0,
-    // Fluid solver
-    PRESSURE:            0.8,
-    PRESSURE_ITERATIONS: 25,
-    CURL:                30,
-    // Smoke behaviour
-    BUOYANCY:     0.5,
-    SMOKE_WEIGHT: 0.05,
-    // Seed splat radius (used by initSmoke, not exposed in GUI)
-    SPLAT_RADIUS: 0.25,
-    // Ray march rendering
-    DENSITY_SCALE: 0.7,
-    ABSORPTION:    15.0,
-    // Display
-    PAUSED:     false,
-    BACK_COLOR: { r: 8, g: 15, b: 40 },
-    TRANSPARENT: false,
-};
+// config is defined in config.js (loaded before this file)
 
 const { gl, ext } = getWebGLContext(canvas);
 
@@ -93,14 +72,14 @@ let pressure3D;    // R    – pressure
 let modeldepth3D;  // R    – model depth buffer
 let modelcolor3D;  // RGBA – model colour buffer
 
-// ── Orbit camera ──────────────────────────────────────────────────────────────
+// ── Orbit camera (initial values from config.js) ───────────────────────────────
 const camera = {
-    theta:  0.0,
-    phi:    0.3,
-    radius: 2.0,
-    cx: 0.0,
-    cy: 0.0,
-    cz: 0.0,
+    theta:  config.CAMERA_THETA,
+    phi:    config.CAMERA_PHI,
+    radius: config.CAMERA_RADIUS,
+    cx:     config.CAMERA_CX,
+    cy:     config.CAMERA_CY,
+    cz:     config.CAMERA_CZ,
 };
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────

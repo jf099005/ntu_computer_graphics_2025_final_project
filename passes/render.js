@@ -127,10 +127,10 @@ function initRender () {
         uniform float uDensityScale;
         uniform float uAbsorption;
 
-        #define MAX_STEPS     64
-        #define SHADOW_STEPS   3
-        #define SHADOW_STEP  0.12
-        #define BOX_RADIUS 5.0
+        #define MAX_STEPS     ${config.MAX_STEPS}
+        #define SHADOW_STEPS  ${config.SHADOW_STEPS}
+        #define SHADOW_STEP   ${config.SHADOW_STEP.toFixed(4)}
+        #define BOX_RADIUS    ${config.BOX_RADIUS.toFixed(4)}
 
         vec2 intersectBox (vec3 ro, vec3 rd) {
             vec3 tMin = (-BOX_RADIUS - ro) / rd;
@@ -273,10 +273,9 @@ function drawRayMarch (target) {
     const aspect = width / height;
 
     const { eye, fwd, right, up } = getCameraBasis();
-    const tanHalfFov = Math.tan(Math.PI / 6.0); // 60° FoV
+    const tanHalfFov = Math.tan((config.CAMERA_FOV * Math.PI / 180) / 2);
 
-    // Fixed key-light from upper-left-front
-    const lx = 0.4, ly = 0.8, lz = 0.45;
+    const lx = config.LIGHT_DIR.x, ly = config.LIGHT_DIR.y, lz = config.LIGHT_DIR.z;
     const lLen = Math.sqrt(lx*lx + ly*ly + lz*lz);
 
     const modelFBO = (typeof getModelScreenFBO === 'function' && getModelScreenFBO())
@@ -293,7 +292,7 @@ function drawRayMarch (target) {
     gl.uniform1i(rayMarchProgram.uniforms.uTemperature,    temperature.read.attach(1));
     gl.uniform1i(rayMarchProgram.uniforms.uModelBuffer,    modelFBO.attach(2));
     gl.uniform3f(rayMarchProgram.uniforms.uLightDir,       lx/lLen, ly/lLen, lz/lLen);
-    gl.uniform3f(rayMarchProgram.uniforms.uLightColor,     1.0, 0.95, 0.88);
+    gl.uniform3f(rayMarchProgram.uniforms.uLightColor,     config.LIGHT_COLOR.r, config.LIGHT_COLOR.g, config.LIGHT_COLOR.b);
     gl.uniform1f(rayMarchProgram.uniforms.uDensityScale,   config.DENSITY_SCALE);
     gl.uniform1f(rayMarchProgram.uniforms.uAbsorption,     config.ABSORPTION);
     blit(target);

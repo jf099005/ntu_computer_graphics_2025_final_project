@@ -176,6 +176,28 @@
                 width: 100%;
             }
 
+            #camera-hud {
+                position: fixed;
+                top: 8px;
+                right: 312px;
+                background: rgba(0, 0, 0, 0.55);
+                color: #b8d4f0;
+                font-family: 'Courier New', monospace;
+                font-size: 12px;
+                line-height: 1.7;
+                padding: 6px 10px;
+                border-radius: 4px;
+                pointer-events: none;
+                z-index: 998;
+                white-space: pre;
+            }
+
+            .hud-label {
+                display: inline-block;
+                width: 28px;
+                color: #6ab0e8;
+            }
+
             @keyframes promo-appear-animation {
                 0% {
                     transform: scale(2.0);
@@ -196,6 +218,12 @@
     </head>
     <body>
         <canvas></canvas>
+
+        <div id="camera-hud">
+            <div class="hud-row"><span class="hud-label">Eye</span><span id="hud-eye"></span></div>
+            <div class="hud-row"><span class="hud-label">Ctr</span><span id="hud-ctr"></span></div>
+            <div class="hud-row" id="hud-angles"></div>
+        </div>
 
         <!-- Mother of God, pls forgive me -->
         <div class="promo">
@@ -219,6 +247,7 @@
             </div>
         </div>
 
+        <script src="./config.js"></script>
         <script src="./utils.js"></script>
         <script src="./webgl-utils.js"></script>
         <script src="./shaders.js"></script>

@@ -3,15 +3,7 @@
 // ── Smoke Emitter ─────────────────────────────────────────────────────────────
 // Gaussian splat injection for density, temperature, and velocity.
 
-const EMITTERS = [
-    { x: 0.5,  y: 0.08, z: 0.5 },
-    { x: -0.5, y: 0.08, z: 0.5 },
-];
-
-const EMIT_RADIUS      = 0.003;
-const EMIT_VELOCITY_Y  = 0.05;
-const EMIT_TEMPERATURE = 0.4;
-const EMIT_DENSITY     = 0.28;
+// Emitter parameters are defined in config.js
 
 let splat3DProgram;
 
@@ -47,18 +39,18 @@ function splat3D (px, py, pz, cr, cg, cb, radius, fbo) {
 
 // Called once at start and by the GUI "re-emit smoke" button.
 function initSmoke () {
-    EMITTERS.forEach(e => {
-        splat3D(e.x, e.y, e.z, EMIT_DENSITY,           EMIT_DENSITY, EMIT_DENSITY, EMIT_RADIUS * 4.0, density);
-        splat3D(e.x, e.y, e.z, EMIT_TEMPERATURE * 2.0, 0.0,          0.0,          EMIT_RADIUS * 4.0, temperature);
-        splat3D(e.x, e.y, e.z, 0.0,                    EMIT_VELOCITY_Y, 0.0,        EMIT_RADIUS * 4.0, velocity3D);
+    config.EMITTERS.forEach(e => {
+        splat3D(e.x, e.y, e.z, config.EMIT_DENSITY,           config.EMIT_DENSITY, config.EMIT_DENSITY, config.EMIT_RADIUS * 4.0, density);
+        splat3D(e.x, e.y, e.z, config.EMIT_TEMPERATURE * 2.0, 0.0,                 0.0,                 config.EMIT_RADIUS * 4.0, temperature);
+        splat3D(e.x, e.y, e.z, 0.0,                           config.EMIT_VELOCITY_Y, 0.0,              config.EMIT_RADIUS * 4.0, velocity3D);
     });
 }
 
 // Called every frame to continuously feed smoke into the volume.
 function emitSmoke () {
-    EMITTERS.forEach(e => {
-        splat3D(e.x, e.y, e.z, EMIT_DENSITY,     EMIT_DENSITY, EMIT_DENSITY, EMIT_RADIUS, density);
-        splat3D(e.x, e.y, e.z, EMIT_TEMPERATURE, 0.0,          0.0,          EMIT_RADIUS, temperature);
-        splat3D(e.x, e.y, e.z, 0.0,              EMIT_VELOCITY_Y, 0.0,       EMIT_RADIUS, velocity3D);
+    config.EMITTERS.forEach(e => {
+        splat3D(e.x, e.y, e.z, config.EMIT_DENSITY,     config.EMIT_DENSITY, config.EMIT_DENSITY, config.EMIT_RADIUS, density);
+        splat3D(e.x, e.y, e.z, config.EMIT_TEMPERATURE, 0.0,                 0.0,                 config.EMIT_RADIUS, temperature);
+        splat3D(e.x, e.y, e.z, 0.0,                     config.EMIT_VELOCITY_Y, 0.0,              config.EMIT_RADIUS, velocity3D);
     });
 }

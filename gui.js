@@ -80,3 +80,20 @@ function textureToCanvas (texture, width, height) {
     ctx.putImageData(imageData, 0, 0);
     return captureCanvas;
 }
+
+function updateCameraHUD () {
+    const th = camera.theta, ph = camera.phi, r = camera.radius;
+    const ex = r * Math.sin(th) * Math.cos(ph) + camera.cx;
+    const ey = r * Math.sin(ph)                + camera.cy;
+    const ez = r * Math.cos(th) * Math.cos(ph) + camera.cz;
+
+    const fmt  = v => (v >= 0 ? ' ' : '') + v.toFixed(2);
+    const fmtD = v => (v >= 0 ? ' ' : '') + (v * 180 / Math.PI).toFixed(1) + '°';
+
+    document.getElementById('hud-eye').textContent =
+        `${fmt(ex)}  ${fmt(ey)}  ${fmt(ez)}`;
+    document.getElementById('hud-ctr').textContent =
+        `${fmt(camera.cx)}  ${fmt(camera.cy)}  ${fmt(camera.cz)}`;
+    document.getElementById('hud-angles').textContent =
+        `θ${fmtD(th)}  φ${fmtD(ph)}  r ${r.toFixed(2)}`;
+}
