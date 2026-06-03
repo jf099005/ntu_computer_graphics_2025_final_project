@@ -61,8 +61,9 @@ const _MODEL_DEPTH_FRAG = /*glsl*/`
         float diff = max(dot(N, L), 0.0) * 0.7 + 0.3;
         float spec = pow(max(dot(N, H), 0.0), 48.0) * 0.4;
         vec3  litColor = uColor * diff + vec3(spec);
-        float depth    = length(vW - uEye);
-        gl_FragColor   = vec4(litColor, depth);
+        float depth    = length(vW - uEye)/20.0;
+        // gl_FragColor   = vec4(litColor, depth);
+        gl_FragColor   = vec4(depth);
     }
 `;
 
@@ -425,7 +426,7 @@ function _drawAllPrimitives (prog, vp) {
 
 function drawModels (targetFBO) {
     if (_models.length === 0) return;
-    if (!_modelProg) _modelProg = _buildProgram(_MODEL_FRAG, 'model');
+    if (!_modelProg) _modelProg = _buildProgram(_MODEL_DEPTH_FRAG, 'model');
 
     const W = targetFBO ? targetFBO.width  : gl.drawingBufferWidth;
     const H = targetFBO ? targetFBO.height : gl.drawingBufferHeight;
@@ -460,6 +461,25 @@ function drawModels (targetFBO) {
 // Renders all primitives into _modelScreenFBO: RGB = lit colour, A = eye-distance.
 // A cleared pixel (alpha = 0) means no solid surface — ray marching passes freely.
 
+
+    // gl.activeTexture(gl.TEXTURE0);
+    // let texture = gl.createTexture();
+    // gl.bindTexture(gl.TEXTURE_2D, texture);
+    // gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, param);
+    // gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, param);
+    // gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    // gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    // gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, w, h, 0, format, type, null);
+
+    // let fbo = gl.createFramebuffer();
+    // gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    // gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+    // gl.viewport(0, 0, w, h);
+    // gl.clear(gl.COLOR_BUFFER_BIT);
+
+    // let texelSizeX = 1.0 / w;
+    // let texelSizeY = 1.0 / h;
+
 function initModelDepthBuffer () {
     const W = gl.drawingBufferWidth, H = gl.drawingBufferHeight;
     if (_modelScreenFBO && _modelScreenFBO.width === W && _modelScreenFBO.height === H) return;
@@ -470,33 +490,27 @@ function initModelDepthBuffer () {
     if (_modelScreenFBO) {
         gl.deleteFramebuffer(_modelScreenFBO.fbo);
         gl.deleteTexture(_modelScreenFBO.texture);
-        gl.deleteRenderbuffer(_modelScreenFBO.depthRB);
+        // gl.deleteRenderbuffer(_modelScreenFBO.depthRB);
     }
 
     const rgba = ext.formatRGBA, texType = ext.halfFloatTexType;
+    gl.activeTexture(gl.TEXTURE0);
 
     const texture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER,  gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER,  gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texImage2D(gl.TEXTURE_2D, 0, rgba.internalFormat, W, H, 0, rgba.format, texType, null);
 
-    const depthRB = gl.createRenderbuffer();
-    gl.bindRenderbuffer(gl.RENDERBUFFER, depthRB);
-    gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, W, H);
-
     const fbo = gl.createFramebuffer();
     gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
-    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depthRB);
-    if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE)
-        console.error('[model] depth capture FBO incomplete');
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
     _modelScreenFBO = {
-        fbo, texture, depthRB, width: W, height: H,
+        fbo, texture, width: W, height: H,
         attach (id) {
             gl.activeTexture(gl.TEXTURE0 + id);
             gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -504,6 +518,50 @@ function initModelDepthBuffer () {
         }
     };
 }
+
+function drawModelDepthCapture () {
+    initModelDepthBuffer();
+    if (_models.length === 0) return;
+    if (!_modelProg) _modelProg = _buildProgram(_MODEL_DEPTH_FRAG, 'model');
+    let targetFBO = _modelScreenFBO.fbo;
+    const W = targetFBO ? targetFBO.width  : gl.drawingBufferWidth;
+    const H = targetFBO ? targetFBO.height : gl.drawingBufferHeight;
+    const { eye, fwd, right, up } = getCameraBasis();
+    const lookAt = [eye[0]+fwd[0], eye[1]+fwd[1], eye[2]+fwd[2]];
+    const view   = mat4LookAt(eye, lookAt, up);
+    const proj   = mat4Perspective(config.CAMERA_FOV * Math.PI / 180, W / H, 0.1, 20.0);
+    const vp     = mat4Multiply(proj, view);
+
+    gl.viewport(0, 0, W, H);
+    // gl.bindFramebuffer(gl.FRAMEBUFFER, targetFBO.fbo);
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthFunc(gl.LEQUAL);
+    gl.depthMask(true);
+    gl.clear(gl.DEPTH_BUFFER_BIT);
+    gl.enable(gl.CULL_FACE);
+    gl.cullFace(gl.BACK);
+    gl.disable(gl.BLEND);
+
+    gl.useProgram(_modelProg.prog);
+    gl.uniform3fv(_modelProg.uEye, new Float32Array(eye));
+    _drawAllPrimitives(_modelProg, vp);
+
+    // gl.disable(gl.DEPTH_TEST);
+    // gl.depthMask(false);
+    // gl.disable(gl.CULL_FACE);
+    // gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    // gl.enable(gl.BLEND);
+
+
+    
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.disable(gl.DEPTH_TEST);
+    gl.depthMask(false);
+    gl.disable(gl.CULL_FACE);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.enable(gl.BLEND);
+}
+
 
 function drawModelDepthCapture () {
     initModelDepthBuffer();
@@ -539,5 +597,6 @@ function drawModelDepthCapture () {
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.enable(gl.BLEND);
 }
+
 
 function getModelScreenFBO () { return _modelScreenFBO; }
