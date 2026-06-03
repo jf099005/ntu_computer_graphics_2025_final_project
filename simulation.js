@@ -62,6 +62,7 @@ function update () {
         emitSmoke(dt);
         step(dt);
     }
+    updateProjectiles(dt);
     render(null);
     updateCameraHUD();
     requestAnimationFrame(update);

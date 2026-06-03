@@ -266,16 +266,10 @@ function getCameraBasis() {
     const cy = Math.cos(yaw);
 
     // yaw = 0, pitch = 0 時，看向 -Z
-    // const fwd = normalize3([
-    //     -sy * cp,
-    //      sp,
-    //     -cy * cp,
-    // ]);
-
     const fwd = normalize3([
-        -sy,
-        0,
-        -cy
+        -sy * cp,
+         sp,
+        -cy * cp,
     ]);
 
     const worldUp = [0, 1, 0];

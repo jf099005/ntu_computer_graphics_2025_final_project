@@ -7,6 +7,9 @@
 // drawModels()                            – call once per frame from render()
 
 const _models = [];
+const _projectiles = [];
+const _colliders = [];
+
 let _modelProg             = null;
 let _modelDepthCaptureProg = null;
 let _modelScreenFBO        = null;
@@ -367,7 +370,101 @@ function _mat4T (tx, ty, tz) {
 function _mat4S (s) {
     return new Float32Array([s,0,0,0, 0,s,0,0, 0,0,s,0, 0,0,0,1]);
 }
+function createProjectileBox(x, y, z, vx, vy, vz) {
+    const size = 0.25;
+    const hx = size * 0.5;
+    const hy = size * 0.5;
+    const hz = size * 0.5;
 
+    // local-space box centered at origin
+    const positions = new Float32Array([
+        -hx, -hy,  hz,   hx, -hy,  hz,   hx,  hy,  hz,  -hx,  hy,  hz,
+         hx, -hy, -hz,  -hx, -hy, -hz,  -hx,  hy, -hz,   hx,  hy, -hz,
+         hx, -hy,  hz,   hx, -hy, -hz,   hx,  hy, -hz,   hx,  hy,  hz,
+        -hx, -hy, -hz,  -hx, -hy,  hz,  -hx,  hy,  hz,  -hx,  hy, -hz,
+        -hx,  hy,  hz,   hx,  hy,  hz,   hx,  hy, -hz,  -hx,  hy, -hz,
+        -hx, -hy, -hz,   hx, -hy, -hz,   hx, -hy,  hz,  -hx, -hy,  hz
+    ]);
+
+    const normals = new Float32Array([
+        0, 0, 1,   0, 0, 1,   0, 0, 1,   0, 0, 1,
+        0, 0,-1,   0, 0,-1,   0, 0,-1,   0, 0,-1,
+        1, 0, 0,   1, 0, 0,   1, 0, 0,   1, 0, 0,
+       -1, 0, 0,  -1, 0, 0,  -1, 0, 0,  -1, 0, 0,
+        0, 1, 0,   0, 1, 0,   0, 1, 0,   0, 1, 0,
+        0,-1, 0,   0,-1, 0,   0,-1, 0,   0,-1, 0
+    ]);
+
+    const indices = new Uint16Array([
+         0,  1,  2,   0,  2,  3,
+         4,  5,  6,   4,  6,  7,
+         8,  9, 10,   8, 10, 11,
+        12, 13, 14,  12, 14, 15,
+        16, 17, 18,  16, 18, 19,
+        20, 21, 22,  20, 22, 23
+    ]);
+
+    const identity = new Float32Array([
+        1,0,0,0,
+        0,1,0,0,
+        0,0,1,0,
+        0,0,0,1
+    ]);
+
+    const prim = _buildPrimitive(
+        positions,
+        normals,
+        indices,
+        [0.95, 0.85, 0.25],
+        identity
+    );
+
+    const projectile = {
+        primitives: [prim],
+        position: [x, y, z],
+        scale: 1,
+        center: [0, 0, 0],
+
+        velocity: [vx, vy, vz],
+        life: 5.0
+    };
+
+    _models.push(projectile);
+    _projectiles.push(projectile);
+}
+
+function updateProjectiles(dt) {
+    const gravity = -3.0;
+
+    for (let i = _projectiles.length - 1; i >= 0; i--) {
+        const p = _projectiles[i];
+
+        p.velocity[1] += gravity * dt;
+
+        p.position[0] += p.velocity[0] * dt;
+        p.position[1] += p.velocity[1] * dt;
+        p.position[2] += p.velocity[2] * dt;
+
+        // 簡單地板碰撞：你的 floor 大約在 y = -3
+        if (p.position[1] < -2.85) {
+            p.position[1] = -2.85;
+            p.velocity[1] *= -0.35;
+            p.velocity[0] *= 0.85;
+            p.velocity[2] *= 0.85;
+        }
+
+        p.life -= dt;
+
+        if (p.life <= 0) {
+            const modelIndex = _models.indexOf(p);
+            if (modelIndex >= 0) {
+                _models.splice(modelIndex, 1);
+            }
+
+            _projectiles.splice(i, 1);
+        }
+    }
+}
 // Render every primitive in _models with the supplied program + VP matrix.
 // The program's uEye uniform must already be set before calling this.
 function _drawAllPrimitives (prog, vp) {
@@ -528,5 +625,6 @@ function drawModelDepthCapture () {
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.enable(gl.BLEND);
 }
+
 
 function getModelScreenFBO () { return _modelScreenFBO; }

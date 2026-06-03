@@ -101,3 +101,31 @@ window.addEventListener('mousemove', e => {
         Math.min(PITCH_LIMIT, camera.pitch)
     );
 });
+
+window.addEventListener('mousedown', e => {
+    // 左鍵
+    if (e.button !== 0) return;
+
+    // 如果還沒鎖定滑鼠，第一次左鍵只拿來鎖定
+    if (document.pointerLockElement !== inputCanvas) {
+        inputCanvas.requestPointerLock();
+        return;
+    }
+
+    const { eye, fwd } = getCameraBasis();
+
+    const throwSpeed = 8.0;
+
+    // 從相機前方一點點的位置生成，避免出生在相機裡面
+    const spawnX = eye[0] + fwd[0] * 0.6;
+    const spawnY = eye[1] + fwd[1] * 0.6;
+    const spawnZ = eye[2] + fwd[2] * 0.6;
+
+    const vx = fwd[0] * throwSpeed;
+    const vy = fwd[1] * throwSpeed + 1.2;
+    const vz = fwd[2] * throwSpeed;
+
+    createProjectileBox(spawnX, spawnY, spawnZ, vx, vy, vz);
+
+    e.preventDefault();
+});
