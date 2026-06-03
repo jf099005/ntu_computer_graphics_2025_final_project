@@ -85,9 +85,7 @@ const camera = {
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 initFramebuffers();
 initSmoke();
-createFloor();
-
-loadGLBModel('f-16.glb', 0, 0, -0.5);
+// loadGLBModel('f-16.glb', 0, 0, -0.5);
 
 let lastUpdateTime = Date.now();
 update();

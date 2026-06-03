@@ -299,22 +299,6 @@ function addMesh (positions, normals, indices, baseColor) {
     _models.push({ primitives: [prim], position: [0, 0, 0], scale: 1, center: [0, 0, 0] });
 }
 
-// Add the ground plane at y = −0.5, x/z ∈ [−2, 2].
-function createFloor () {
-    const pos = new Float32Array([
-        -2, -0.5, -2,
-         2, -0.5, -2,
-         2, -0.5,  2,
-        -2, -0.5,  2,
-    ]);
-    const nrm = new Float32Array([
-        0, 1, 0,  0, 1, 0,  0, 1, 0,  0, 1, 0,
-    ]);
-    // CCW winding viewed from above → front face / normal pointing up
-    const idx = new Uint16Array([0, 3, 2, 0, 2, 1]);
-    addMesh(pos, nrm, idx, [0.60, 0.44, 0.24]);
-}
-
 // ── Per-frame helpers ─────────────────────────────────────────────────────────
 
 function _mat4T (tx, ty, tz) {
