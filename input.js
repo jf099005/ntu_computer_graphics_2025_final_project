@@ -1,4 +1,5 @@
 'use strict';
+/* global camera */
 
 // FPS-style controls:
 //   P          – toggle pause

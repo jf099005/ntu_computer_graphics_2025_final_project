@@ -73,7 +73,7 @@ let modeldepth3D;  // R    – model depth buffer
 let modelcolor3D;  // RGBA – model colour buffer
 
 // ── Orbit camera (initial values from config.js) ───────────────────────────────
-const camera = {
+window.camera = {
     theta:  config.CAMERA_THETA,
     phi:    config.CAMERA_PHI,
     radius: config.CAMERA_RADIUS,
