@@ -91,5 +91,5 @@ const config = {
     // ── Display ────────────────────────────────────────────────────────────────
     PAUSED:      false,
     BACK_COLOR:  { r: 8, g: 15, b: 40 },
-    TRANSPARENT: false,
+    TRANSPARENT: true,
 };

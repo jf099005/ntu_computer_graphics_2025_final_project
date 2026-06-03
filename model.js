@@ -299,6 +299,66 @@ function addMesh (positions, normals, indices, baseColor) {
     _models.push({ primitives: [prim], position: [0, 0, 0], scale: 1, center: [0, 0, 0] });
 }
 
+function _createBoxMesh (cx, cy, cz, width, height, depth, color) {
+    const hx = width  * 0.5;
+    const hy = height * 0.5;
+    const hz = depth  * 0.5;
+
+    const positions = new Float32Array([
+        -hx, -hy,  hz,   hx, -hy,  hz,   hx,  hy,  hz,  -hx,  hy,  hz,
+         hx, -hy, -hz,  -hx, -hy, -hz,  -hx,  hy, -hz,   hx,  hy, -hz,
+         hx, -hy,  hz,   hx, -hy, -hz,   hx,  hy, -hz,   hx,  hy,  hz,
+        -hx, -hy, -hz,  -hx, -hy,  hz,  -hx,  hy,  hz,  -hx,  hy, -hz,
+        -hx,  hy,  hz,   hx,  hy,  hz,   hx,  hy, -hz,  -hx,  hy, -hz,
+        -hx, -hy, -hz,   hx, -hy, -hz,   hx, -hy,  hz,  -hx, -hy,  hz
+    ]);
+
+    for (let i = 0; i < positions.length; i += 3) {
+        positions[i]   += cx;
+        positions[i+1] += cy;
+        positions[i+2] += cz;
+    }
+
+    const normals = new Float32Array([
+        0, 0, 1,   0, 0, 1,   0, 0, 1,   0, 0, 1,
+        0, 0,-1,   0, 0,-1,   0, 0,-1,   0, 0,-1,
+        1, 0, 0,   1, 0, 0,   1, 0, 0,   1, 0, 0,
+       -1, 0, 0,  -1, 0, 0,  -1, 0, 0,  -1, 0, 0,
+        0, 1, 0,   0, 1, 0,   0, 1, 0,   0, 1, 0,
+        0,-1, 0,   0,-1, 0,   0,-1, 0,   0,-1, 0
+    ]);
+
+    const indices = new Uint16Array([
+         0,  1,  2,   0,  2,  3,
+         4,  5,  6,   4,  6,  7,
+         8,  9, 10,   8, 10, 11,
+        12, 13, 14,  12, 14, 15,
+        16, 17, 18,  16, 18, 19,
+        20, 21, 22,  20, 22, 23
+    ]);
+
+    addMesh(positions, normals, indices, color);
+}
+
+function createFloor () {
+    _createBoxMesh(0, -3.0, 12, 16.0, 0.1, 16.0, [0.18, 0.20, 0.24]);
+}
+
+function createBox (x, y, z, width, height, depth, color) {
+    _createBoxMesh(x, y, z, width, height, depth, color);
+}
+
+function createSceneGeometry () {
+    createFloor();
+    createBox( 2.0, -2.0, 12.0, 2.0, 2.0, 2.0, [0.84, 0.35, 0.22]);
+    createBox(-3.0, -2.25, 14.0, 1.5, 1.5, 1.5, [0.28, 0.78, 0.82]);
+    createBox( 0.0, -2.5,  8.0, 1.0, 1.0, 1.0, [0.75, 0.72, 0.36]);
+    createBox( 0.0, -1.0,  8.0, 8.0, 4.0, 0.2, [0.32, 0.35, 0.38]);
+    createBox( 0.0, -1.0, 16.0, 8.0, 4.0, 0.2, [0.32, 0.35, 0.38]);
+    createBox(-8.0, -1.0, 12.0, 0.2, 4.0, 16.0, [0.32, 0.35, 0.38]);
+    createBox( 8.0, -1.0, 12.0, 0.2, 4.0, 16.0, [0.32, 0.35, 0.38]);
+}
+
 // ── Per-frame helpers ─────────────────────────────────────────────────────────
 
 function _mat4T (tx, ty, tz) {

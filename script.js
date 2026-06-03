@@ -85,6 +85,7 @@ window.camera = {
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 initFramebuffers();
 initSmoke();
+createSceneGeometry();
 // loadGLBModel('f-16.glb', 0, 0, -0.5);
 
 let lastUpdateTime = Date.now();
