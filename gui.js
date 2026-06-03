@@ -82,18 +82,44 @@ function textureToCanvas (texture, width, height) {
 }
 
 function updateCameraHUD () {
-    const th = camera.theta, ph = camera.phi, r = camera.radius;
-    const ex = r * Math.sin(th) * Math.cos(ph) + camera.cx;
-    const ey = r * Math.sin(ph)                + camera.cy;
-    const ez = r * Math.cos(th) * Math.cos(ph) + camera.cz;
+    const yaw = camera.yaw;
+    const pitch = camera.pitch;
+
+    const cp = Math.cos(pitch);
+    const sp = Math.sin(pitch);
+    const sy = Math.sin(yaw);
+    const cy = Math.cos(yaw);
+
+    // yaw = 0, pitch = 0 時，看向 -Z
+    const fwd = [
+        -sy * cp,
+         sp,
+        -cy * cp,
+    ];
+
+    const eye = [
+        camera.x,
+        camera.y,
+        camera.z,
+    ];
+
+    // FPS camera 沒有真正的 orbit center
+    // 所以這裡把 Ctr 定義成「相機前方 1 單位的位置」
+    const ctr = [
+        eye[0] + fwd[0],
+        eye[1] + fwd[1],
+        eye[2] + fwd[2],
+    ];
 
     const fmt  = v => (v >= 0 ? ' ' : '') + v.toFixed(2);
     const fmtD = v => (v >= 0 ? ' ' : '') + (v * 180 / Math.PI).toFixed(1) + '°';
 
     document.getElementById('hud-eye').textContent =
-        `${fmt(ex)}  ${fmt(ey)}  ${fmt(ez)}`;
+        `${fmt(eye[0])}  ${fmt(eye[1])}  ${fmt(eye[2])}`;
+
     document.getElementById('hud-ctr').textContent =
-        `${fmt(camera.cx)}  ${fmt(camera.cy)}  ${fmt(camera.cz)}`;
+        `${fmt(ctr[0])}  ${fmt(ctr[1])}  ${fmt(ctr[2])}`;
+
     document.getElementById('hud-angles').textContent =
-        `θ${fmtD(th)}  φ${fmtD(ph)}  r ${r.toFixed(2)}`;
+        `yaw${fmtD(yaw)}  pitch${fmtD(pitch)}`;
 }

@@ -74,12 +74,12 @@ let modelcolor3D;  // RGBA – model colour buffer
 
 // ── Orbit camera (initial values from config.js) ───────────────────────────────
 window.camera = {
-    theta:  config.CAMERA_THETA,
-    phi:    config.CAMERA_PHI,
-    radius: config.CAMERA_RADIUS,
-    cx:     config.CAMERA_CX,
-    cy:     config.CAMERA_CY,
-    cz:     config.CAMERA_CZ,
+    x: config.CAMERA_X ?? 0.0,
+    y: config.CAMERA_Y ?? -2.0,
+    z: config.CAMERA_Z ?? 14.0,
+
+    yaw: config.CAMERA_YAW ?? 0.0,
+    pitch: config.CAMERA_PITCH ?? 0.0,
 };
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────

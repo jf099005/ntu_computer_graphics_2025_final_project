@@ -243,28 +243,43 @@ function drawColor (target, color) {
 }
 
 // Build orthonormal camera basis from spherical orbit angles.
-function getCameraBasis () {
-    const th = camera.theta, ph = camera.phi, r = camera.radius;
-    const ex = r * Math.sin(th) * Math.cos(ph);
-    const ey = r * Math.sin(ph);
-    const ez = r * Math.cos(th) * Math.cos(ph);
-    const len = Math.sqrt(ex*ex + ey*ey + ez*ez);
+function normalize3(v) {
+    const len = Math.hypot(v[0], v[1], v[2]) || 1.0;
+    return [v[0] / len, v[1] / len, v[2] / len];
+}
 
-    const fx = -ex/len, fy = -ey/len, fz = -ez/len;
+function cross3(a, b) {
+    return [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ];
+}
 
-    const rLen = Math.sqrt(fz*fz + fx*fx) || 1e-6;
-    const rx = -fz/rLen, ry = 0.0, rz = fx/rLen;
+function getCameraBasis() {
+    const yaw = camera.yaw;
+    const pitch = camera.pitch;
 
-    const ux = ry*fz - rz*fy;
-    const uy = rz*fx - rx*fz;
-    const uz = rx*fy - ry*fx;
+    const cp = Math.cos(pitch);
+    const sp = Math.sin(pitch);
+    const sy = Math.sin(yaw);
+    const cy = Math.cos(yaw);
 
-    return {
-        eye:   [ex + camera.cx, ey + camera.cy, ez + camera.cz],
-        fwd:   [fx, fy, fz],
-        right: [rx, ry, rz],
-        up:    [ux, uy, uz],
-    };
+    // yaw = 0, pitch = 0 時，看向 -Z
+    const fwd = normalize3([
+        -sy * cp,
+         sp,
+        -cy * cp,
+    ]);
+
+    const worldUp = [0, 1, 0];
+
+    const right = normalize3(cross3(fwd, worldUp));
+    const up = normalize3(cross3(right, fwd));
+
+    const eye = [camera.x, camera.y, camera.z];
+
+    return { eye, fwd, right, up };
 }
 
 function drawRayMarch (target) {

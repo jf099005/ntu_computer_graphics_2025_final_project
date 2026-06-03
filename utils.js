@@ -153,18 +153,3 @@ function mat4Multiply (a, b) {
         }
     return out;
 }
-
-// Build perspective * view matrix for an orbit camera.
-// theta = azimuth (radians), phi = elevation (radians), radius = distance.
-function getCameraViewProjection (theta, phi, radius, aspect) {
-    const eye = [
-        radius * Math.sin(theta) * Math.cos(phi),
-        radius * Math.sin(phi),
-        radius * Math.cos(theta) * Math.cos(phi)
-    ];
-    const view = mat4LookAt(eye, [0, 0, 0], [0, 1, 0]);
-    const proj = mat4Perspective(Math.PI / 3.0, aspect, 0.1, 10.0);
-    return mat4Multiply(proj, view);
-}
-
-//depth calculation 

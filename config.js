@@ -71,14 +71,20 @@ const config = {
     DENSITY_SCALE: 0.7,             // visual density multiplier
     ABSORPTION:    15.0,            // opacity per unit density
 
-    // ── Camera ─────────────────────────────────────────────────────────────────
-    CAMERA_THETA:  0.0,              // azimuth angle (radians, horizontal orbit)
-    CAMERA_PHI:    0.0,              // elevation angle (radians, vertical orbit)
-    CAMERA_RADIUS: 2.0,              // distance from orbit center
-    CAMERA_CX:     0.0,              // orbit center X
-    CAMERA_CY:     -2.0,              // orbit center Y
-    CAMERA_CZ:     12.0,              // orbit center Z
-    CAMERA_FOV:    60,               // vertical field of view (degrees)
+   // ── Camera ─────────────────────────────────────────────────────────────────
+    CAMERA_X:      0.0,
+    CAMERA_Y:     -2.0,
+    CAMERA_Z:     14.0,
+
+    CAMERA_YAW:    0.0,   // 0 = look toward -Z
+    CAMERA_PITCH:  0.0,
+
+    CAMERA_FOV:    60,
+
+    // ── FPS Camera Controls ────────────────────────────────────────────────────
+    CAMERA_MOVE_SPEED:      10.0,    // world units per second
+    CAMERA_SPRINT_MULTIPLIER: 3.0,
+    CAMERA_MOUSE_SENSITIVITY: 0.002,
 
     // ── Camera Key Speeds ──────────────────────────────────────────────────────
     CAMERA_KEY_SPEED: 0.05,          // radians per arrow-key press

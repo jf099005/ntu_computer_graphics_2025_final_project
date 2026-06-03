@@ -483,7 +483,7 @@ function getCameraBasis() {
     const sy = Math.sin(yaw);
     const cy = Math.cos(yaw);
 
-    // yaw = 0 時看向 -Z
+    // yaw = 0, pitch = 0 時，看向 -Z
     const fwd = normalize3([
         -sy * cp,
          sp,
@@ -491,6 +491,7 @@ function getCameraBasis() {
     ]);
 
     const worldUp = [0, 1, 0];
+
     const right = normalize3(cross3(fwd, worldUp));
     const up = normalize3(cross3(right, fwd));
 

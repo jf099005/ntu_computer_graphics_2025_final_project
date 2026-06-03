@@ -1,18 +1,37 @@
 'use strict';
-/* global camera */
+/* global camera, config */
 
 // FPS-style controls:
-//   P          – toggle pause
-//   WASD       – move camera position (based on current view direction)
-//   Mouse      – look around (adjust view angle)
+//   P              – toggle pause
+//   WASD           – move camera position
+//   Space          – move up
+//   Ctrl           – move down
+//   Right mouse    – look around
 
-// speeds from config.js
-const PHI_LIMIT = Math.PI * 0.44; // ~79° – prevents gimbal lock near poles
-
-// Mouse sensitivity for FPS-style look
+const PITCH_LIMIT = Math.PI * 0.44;
 const MOUSE_SENSITIVITY = 0.002;
+
 let lastMouseX = 0;
 let lastMouseY = 0;
+
+function getHorizontalMoveBasis() {
+    const yaw = camera.yaw;
+
+    // yaw = 0 時，看向 -Z
+    const forward = [
+        -Math.sin(yaw),
+        0,
+        -Math.cos(yaw),
+    ];
+
+    const right = [
+        Math.cos(yaw),
+        0,
+        -Math.sin(yaw),
+    ];
+
+    return { forward, right };
+}
 
 window.addEventListener('keydown', e => {
     switch (e.code) {
@@ -20,28 +39,50 @@ window.addEventListener('keydown', e => {
             config.PAUSED = !config.PAUSED;
             break;
 
-        // WASD: move camera position in horizontal plane aligned with current view direction
         case 'KeyW':
         case 'KeyS':
         case 'KeyA':
-        case 'KeyD': {
-            const th = camera.theta;
-            // horizontal forward: direction camera looks at projected on XZ plane
-            const fhx = -Math.sin(th), fhz = -Math.cos(th);
-            // horizontal right: perpendicular to forward, in XZ plane
-            const rhx =  Math.cos(th), rhz = -Math.sin(th);
+        case 'KeyD':
+        case 'Space':
+        case 'ControlLeft':
+        case 'ControlRight': {
+            const { forward, right } = getHorizontalMoveBasis();
+            const speed = config.CAMERA_MOVE_SPEED;
 
-            if (e.code === 'KeyW') { camera.cx += fhx * config.CAMERA_MOVE_SPEED; camera.cz += fhz * config.CAMERA_MOVE_SPEED; }
-            if (e.code === 'KeyS') { camera.cx -= fhx * config.CAMERA_MOVE_SPEED; camera.cz -= fhz * config.CAMERA_MOVE_SPEED; }
-            if (e.code === 'KeyA') { camera.cx -= rhx * config.CAMERA_MOVE_SPEED; camera.cz -= rhz * config.CAMERA_MOVE_SPEED; }
-            if (e.code === 'KeyD') { camera.cx += rhx * config.CAMERA_MOVE_SPEED; camera.cz += rhz * config.CAMERA_MOVE_SPEED; }
+            if (e.code === 'KeyW') {
+                camera.x += forward[0] * speed;
+                camera.z += forward[2] * speed;
+            }
+
+            if (e.code === 'KeyS') {
+                camera.x -= forward[0] * speed;
+                camera.z -= forward[2] * speed;
+            }
+
+            if (e.code === 'KeyA') {
+                camera.x -= right[0] * speed;
+                camera.z -= right[2] * speed;
+            }
+
+            if (e.code === 'KeyD') {
+                camera.x += right[0] * speed;
+                camera.z += right[2] * speed;
+            }
+
+            if (e.code === 'Space') {
+                camera.y += speed;
+            }
+
+            if (e.code === 'ControlLeft' || e.code === 'ControlRight') {
+                camera.y -= speed;
+            }
+
             e.preventDefault();
             break;
         }
     }
 });
 
-// Mouse movement for FPS-style camera control (right button only)
 window.addEventListener('mousemove', e => {
     const deltaX = e.clientX - lastMouseX;
     const deltaY = e.clientY - lastMouseY;
@@ -49,12 +90,23 @@ window.addEventListener('mousemove', e => {
     lastMouseX = e.clientX;
     lastMouseY = e.clientY;
 
-    // Only adjust view when right mouse button is pressed
+    // 按住右鍵才轉視角
     if (e.buttons & 2) {
-        // Update horizontal angle (theta) based on horizontal mouse movement
-        camera.theta += deltaX * MOUSE_SENSITIVITY;
+        camera.yaw += deltaX * MOUSE_SENSITIVITY;
 
-        // Update vertical angle (phi) based on vertical mouse movement, clamped to prevent flipping
-        camera.phi = Math.max(-PHI_LIMIT, Math.min(PHI_LIMIT, camera.phi + deltaY * MOUSE_SENSITIVITY));
+        // 滑鼠往上移，通常應該是抬頭，所以這裡用 -=
+        camera.pitch -= deltaY * MOUSE_SENSITIVITY;
+
+        camera.pitch = Math.max(
+            -PITCH_LIMIT,
+            Math.min(PITCH_LIMIT, camera.pitch)
+        );
+
+        e.preventDefault();
     }
+});
+
+// 避免右鍵選單跳出
+window.addEventListener('contextmenu', e => {
+    e.preventDefault();
 });
