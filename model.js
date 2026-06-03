@@ -667,17 +667,17 @@ function drawModels () {
     gl.depthFunc(gl.LEQUAL);
     gl.depthMask(true);
     gl.clear(gl.DEPTH_BUFFER_BIT);
-    // gl.enable(gl.CULL_FACE);
-    // gl.cullFace(gl.BACK);
+    gl.enable(gl.CULL_FACE);
+    gl.cullFace(gl.BACK);
     gl.disable(gl.BLEND);
 
     gl.useProgram(_modelProg.prog);
     gl.uniform3fv(_modelProg.uEye, new Float32Array(eye));
     _drawAllPrimitives(_modelProg, vp);
 
-    // gl.disable(gl.DEPTH_TEST);
+    gl.disable(gl.DEPTH_TEST);
     gl.depthMask(false);
-    // gl.disable(gl.CULL_FACE);
+    gl.disable(gl.CULL_FACE);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.enable(gl.BLEND);
 }
@@ -688,10 +688,15 @@ function drawModels () {
 
 function initModelDepthBuffer () {
     const W = gl.drawingBufferWidth, H = gl.drawingBufferHeight;
-    if (_modelScreenFBO && _modelScreenFBO.width === W && _modelScreenFBO.height === H) return;
+    // if (_modelScreenFBO && _modelScreenFBO.width === W && _modelScreenFBO.height === H) return;
 
     if (!_modelDepthCaptureProg)
         _modelDepthCaptureProg = _buildProgram(_MODEL_DEPTH_FRAG, 'depth');
+
+// initModelDepthBuffer() 裡加：
+    const depthRB = gl.createRenderbuffer();
+    gl.bindRenderbuffer(gl.RENDERBUFFER, depthRB);
+    gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, W, H);
 
     if (_modelScreenFBO) {
         gl.deleteFramebuffer(_modelScreenFBO.fbo);
@@ -714,6 +719,10 @@ function initModelDepthBuffer () {
     const fbo = gl.createFramebuffer();
     gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depthRB);
+
+    const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+    if (status !== gl.FRAMEBUFFER_COMPLETE) console.error('[depth FBO] incomplete:', status.toString(16));
 
     _modelScreenFBO = {
         fbo, texture, width: W, height: H,
@@ -724,6 +733,43 @@ function initModelDepthBuffer () {
         }
     };
 }
+
+
+// function drawModelDepthCapture () {
+//     initModelDepthBuffer();
+
+//     const { eye, fwd, right, up } = getCameraBasis();
+//     const W = _modelScreenFBO.width, H = _modelScreenFBO.height;
+//     const lookAt = [eye[0]+fwd[0], eye[1]+fwd[1], eye[2]+fwd[2]];
+//     const view   = mat4LookAt(eye, lookAt, up);
+//     const proj   = mat4Perspective(config.CAMERA_FOV * Math.PI / 180, W / H, 0.1, 20.0);
+//     const vp     = mat4Multiply(proj, view);
+
+//     gl.bindFramebuffer(gl.FRAMEBUFFER, _modelScreenFBO.fbo);
+//     gl.viewport(0, 0, W, H);
+//     gl.clearColor(0.0, 0.0, 0.0, 0.0);  // A=0 → no solid surface
+//     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+//     gl.enable(gl.DEPTH_TEST);
+//     gl.depthFunc(gl.LEQUAL);
+//     gl.depthMask(true);
+//     // gl.enable(gl.CULL_FACE);
+//     // gl.cullFace(gl.BACK);
+//     gl.disable(gl.BLEND);
+
+//     if (_models.length > 0) {
+//         gl.useProgram(_modelDepthCaptureProg.prog);
+//         gl.uniform3fv(_modelDepthCaptureProg.uEye, new Float32Array(eye));
+//         _drawAllPrimitives(_modelDepthCaptureProg, vp);
+//     }
+
+//     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+//     gl.disable(gl.DEPTH_TEST);
+//     gl.depthMask(false);
+//     gl.disable(gl.CULL_FACE);
+//     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+//     gl.enable(gl.BLEND);
+// }
+
 
 
 function drawModelDepthCapture () {
@@ -740,11 +786,11 @@ function drawModelDepthCapture () {
     gl.viewport(0, 0, W, H);
     gl.clearColor(0.0, 0.0, 0.0, 0.0);  // A=0 → no solid surface
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    // gl.enable(gl.DEPTH_TEST);
-    // gl.depthFunc(gl.LEQUAL);
-    // gl.depthMask(true);
-    // gl.enable(gl.CULL_FACE);
-    // gl.cullFace(gl.BACK);
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthFunc(gl.LEQUAL);
+    gl.depthMask(true);
+    gl.enable(gl.CULL_FACE);
+    gl.cullFace(gl.BACK);
     gl.disable(gl.BLEND);
 
     if (_models.length > 0) {
@@ -754,12 +800,11 @@ function drawModelDepthCapture () {
     }
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    // gl.disable(gl.DEPTH_TEST);
-    // gl.depthMask(false);
-    // gl.disable(gl.CULL_FACE);
+    gl.disable(gl.DEPTH_TEST);
+    gl.depthMask(false);
+    gl.disable(gl.CULL_FACE);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.enable(gl.BLEND);
 }
-
 
 function getModelScreenFBO () { return _modelScreenFBO; }

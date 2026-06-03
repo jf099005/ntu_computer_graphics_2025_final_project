@@ -90,7 +90,8 @@ const config = {
     LIGHT_COLOR: { r: 1.0, g: 0.95, b: 0.88 },  // key-light colour
 
     // ── Display ────────────────────────────────────────────────────────────────
-    PAUSED:      false,
-    BACK_COLOR:  { r: 8, g: 15, b: 40 },
-    TRANSPARENT: true,
+    PAUSED:          false,
+    BACK_COLOR:      { r: 8, g: 15, b: 40 },
+    TRANSPARENT:     true,
+    SHOW_DEPTH_VIZ:  false,  // Space key toggles depth visualization mode
 };

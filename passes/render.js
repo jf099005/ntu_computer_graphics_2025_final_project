@@ -6,6 +6,7 @@
 
 let colorProgram;
 let rayMarchProgram;
+let depthVizProgram;
 let displayMaterial;
 let _dummyModelFBO;   // 1×1 fallback for uModelBuffer when no depth capture exists
 
@@ -219,8 +220,39 @@ function initRender () {
         }
     `);
 
+    const depthVizShader = compileShader(gl.FRAGMENT_SHADER, /*glsl*/`
+        precision highp float;
+        precision highp sampler2D;
+
+        varying vec2 vUv;
+        uniform sampler2D uModelBuffer;
+        uniform vec3 uBackColor;
+
+        vec3 falseColor (float t) {
+            t = clamp(t, 0.0, 1.0);
+            if (t < 0.25) { return mix(vec3(1.0, 0.0, 0.0), vec3(1.0, 1.0, 0.0), t * 4.0); }
+            if (t < 0.5)  { return mix(vec3(1.0, 1.0, 0.0), vec3(0.0, 1.0, 0.0), (t - 0.25) * 4.0); }
+            if (t < 0.75) { return mix(vec3(0.0, 1.0, 0.0), vec3(0.0, 1.0, 1.0), (t - 0.5)  * 4.0); }
+                            return mix(vec3(0.0, 1.0, 1.0), vec3(0.0, 0.0, 1.0), (t - 0.75) * 4.0);
+        }
+
+        void main () {
+            float depth = texture2D(uModelBuffer, vUv).a;
+            // if (depth <= 0.0) {
+            //     gl_FragColor = vec4(uBackColor, 1.0);
+            //     return;
+            // }
+            // depth = depth / 5.0;
+            depth = 1.0 - depth / 20.0;
+            // float t = clamp(depth / 20.0, 0.0, 1.0);
+            // gl_FragColor = vec4(depth/20, depth/20, depth/20,1.0);
+            gl_FragColor = vec4(depth, depth, depth,1.0);
+        }
+    `);
+
     colorProgram    = new Program(baseVertexShader, colorShader);
     rayMarchProgram = new Program(baseVertexShader, rayMarchShader);
+    depthVizProgram = new Program(baseVertexShader, depthVizShader);
     displayMaterial = new Material(displayVertexShader, displayShaderSource);
 
     // 1×1 RGBA float FBO cleared to 0 — used as uModelBuffer when no depth capture is ready.
@@ -228,14 +260,35 @@ function initRender () {
                                 ext.halfFloatTexType, gl.NEAREST);
 }
 
+function drawDepthViz () {
+    const modelFBO = (typeof getModelScreenFBO === 'function' && getModelScreenFBO())
+                     || _dummyModelFBO;
+    const bg = normalizeColor(config.BACK_COLOR);
+
+    gl.disable(gl.BLEND);
+    gl.disable(gl.DEPTH_TEST);
+    gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+    depthVizProgram.bind();
+    gl.uniform1i(depthVizProgram.uniforms.uModelBuffer, modelFBO.attach(0));
+    gl.uniform3f(depthVizProgram.uniforms.uBackColor, bg.r, bg.g, bg.b);
+    blit(null);
+}
+
 function render (target) {
     gl.disable(gl.BLEND);
 
-    if (!config.TRANSPARENT)
-        drawColor(target, normalizeColor(config.BACK_COLOR));
-
     // Build per-pixel model depth+colour buffer before ray marching.
     if (typeof drawModelDepthCapture === 'function') drawModelDepthCapture();
+
+    if (config.SHOW_DEPTH_VIZ) {
+        drawDepthViz();
+        return;
+    }
+
+    if (!config.TRANSPARENT)
+        drawColor(target, normalizeColor(config.BACK_COLOR));
 
     if (typeof drawModels === 'function') drawModels();
 

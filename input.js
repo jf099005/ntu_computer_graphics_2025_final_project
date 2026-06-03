@@ -4,8 +4,9 @@
 // FPS-style controls:
 //   P        – toggle pause
 //   WASD     – move camera position
-//   Space    – move up
+//   Shift    – move up
 //   Ctrl     – move down
+//   Space    – toggle depth visualization
 //   Mouse    – look around after pointer lock
 
 const PITCH_LIMIT = Math.PI * 0.44;
@@ -38,11 +39,17 @@ window.addEventListener('keydown', e => {
             config.PAUSED = !config.PAUSED;
             break;
 
+        case 'Space':
+            config.SHOW_DEPTH_VIZ = !config.SHOW_DEPTH_VIZ;
+            e.preventDefault();
+            break;
+
         case 'KeyW':
         case 'KeyS':
         case 'KeyA':
         case 'KeyD':
-        case 'Space':
+        case 'ShiftLeft':
+        case 'ShiftRight':
         case 'ControlLeft':
         case 'ControlRight': {
             const { forward, right } = getHorizontalMoveBasis();
@@ -68,7 +75,7 @@ window.addEventListener('keydown', e => {
                 camera.z += right[2] * speed;
             }
 
-            if (e.code === 'Space') {
+            if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
                 camera.y += speed;
             }
 
