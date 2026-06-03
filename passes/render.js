@@ -9,6 +9,14 @@ let rayMarchProgram;
 let displayMaterial;
 let _dummyModelFBO;   // 1×1 fallback for uModelBuffer when no depth capture exists
 
+let _passthroughProg = null;   // panel 1 & 3: just shows texture RGB
+let _depthGrayProg   = null;   // panel 2: depth alpha → grayscale
+let _sceneFBO        = null;   // full composited scene (panel 1)
+let _rayFBO          = null;   // ray march only (panel 3)
+let _panelQuadVAO    = null;
+let _panelQuadVB     = null;
+let _panelQuadIB     = null;
+
 function initRender () {
     // Vertex shader for full-screen display quads
     const displayVertexShader = compileShader(gl.VERTEX_SHADER, /*glsl*/`
@@ -218,22 +226,166 @@ function initRender () {
     // 1×1 RGBA float FBO cleared to 0 — used as uModelBuffer when no depth capture is ready.
     _dummyModelFBO = createFBO(1, 1, ext.formatRGBA.internalFormat, ext.formatRGBA.format,
                                 ext.halfFloatTexType, gl.NEAREST);
+
+    // ── Debug panel shaders ───────────────────────────────────────────────────
+    const passthroughFrag = compileShader(gl.FRAGMENT_SHADER, /*glsl*/`
+        precision mediump float;
+        varying vec2 vUv;
+        uniform sampler2D uTexture;
+        void main () {
+            gl_FragColor = vec4(texture2D(uTexture, vUv).rgb, 1.0);
+        }
+    `);
+
+    const depthGrayFrag = compileShader(gl.FRAGMENT_SHADER, /*glsl*/`
+        precision mediump float;
+        varying vec2 vUv;
+        uniform sampler2D uTexture;
+        void main () {
+            float d = texture2D(uTexture, vUv).a;
+            float g = d > 0.0 ? 1.0 - clamp(d / 20.0, 0.0, 1.0) : 0.0;
+            gl_FragColor = vec4(g, g, g, 1.0);
+        }
+    `);
+
+    _passthroughProg = new Program(baseVertexShader, passthroughFrag);
+    _depthGrayProg   = new Program(baseVertexShader, depthGrayFrag);
+
+    // Separate quad geometry for panel blitting (avoids conflicting with the main blit VAO)
+    _panelQuadVB = gl.createBuffer();
+    const panelVB = _panelQuadVB;
+    gl.bindBuffer(gl.ARRAY_BUFFER, panelVB);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, -1,1, 1,1, 1,-1]), gl.STATIC_DRAW);
+    _panelQuadIB = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, _panelQuadIB);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array([0,1,2,0,2,3]), gl.STATIC_DRAW);
+
+    if (gl.createVertexArray) {
+        _panelQuadVAO = gl.createVertexArray();
+        gl.bindVertexArray(_panelQuadVAO);
+        gl.bindBuffer(gl.ARRAY_BUFFER, panelVB);
+        gl.enableVertexAttribArray(0);
+        gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, _panelQuadIB);
+        gl.bindVertexArray(null);
+    }
+}
+
+// Recreate a simple color-only panel FBO when canvas dimensions change.
+function _ensurePanelFBO (fbo, w, h) {
+    if (fbo && fbo.width === w && fbo.height === h) return fbo;
+    if (fbo) {
+        gl.deleteFramebuffer(fbo.fbo);
+        gl.deleteTexture(fbo.texture);
+    }
+    return createFBO(w, h, ext.formatRGBA.internalFormat, ext.formatRGBA.format,
+                     ext.halfFloatTexType, gl.NEAREST);
+}
+
+// Recreate an FBO with both color and depth attachments (needed by drawModels).
+function _ensureSceneFBO (fbo, w, h) {
+    if (fbo && fbo.width === w && fbo.height === h) return fbo;
+    if (fbo) {
+        gl.deleteFramebuffer(fbo.fbo);
+        gl.deleteTexture(fbo.texture);
+        if (fbo.depthRB) gl.deleteRenderbuffer(fbo.depthRB);
+    }
+
+    const rgba = ext.formatRGBA;
+    const texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, rgba.internalFormat, w, h, 0, rgba.format,
+                  ext.halfFloatTexType, null);
+
+    const depthRB = gl.createRenderbuffer();
+    gl.bindRenderbuffer(gl.RENDERBUFFER, depthRB);
+    gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, w, h);
+
+    const sceneFbo = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, sceneFbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depthRB);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+    return {
+        fbo: sceneFbo, texture, depthRB, width: w, height: h,
+        texelSizeX: 1.0 / w, texelSizeY: 1.0 / h,
+        attach (id) {
+            gl.activeTexture(gl.TEXTURE0 + id);
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+            return id;
+        }
+    };
+}
+
+// Draw an FBO's texture into the sub-rectangle (x, y, w, h) of the canvas.
+function _blitToPanel (prog, fbo, x, y, w, h) {
+    prog.bind();
+    gl.uniform1i(prog.uniforms.uTexture, fbo.attach(0));
+    gl.uniform2f(prog.uniforms.texelSize, 1.0 / fbo.width, 1.0 / fbo.height);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(x, y, w, h);
+    if (_panelQuadVAO) {
+        gl.bindVertexArray(_panelQuadVAO);
+    } else {
+        gl.bindBuffer(gl.ARRAY_BUFFER, _panelQuadVB);
+        gl.enableVertexAttribArray(0);
+        gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, _panelQuadIB);
+    }
+    gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
+    if (_panelQuadVAO) gl.bindVertexArray(null);
 }
 
 function render (target) {
+    const W  = gl.drawingBufferWidth;
+    const H  = gl.drawingBufferHeight;
+    const pw = Math.floor(W / 3);
+
+    _sceneFBO = _ensureSceneFBO(_sceneFBO, W, H);
+    _rayFBO   = _ensurePanelFBO(_rayFBO,   W, H);
+
     gl.disable(gl.BLEND);
 
-    if (!config.TRANSPARENT)
-        drawColor(target, normalizeColor(config.BACK_COLOR));
+    // ── Panel 1: full composited scene ────────────────────────────────────────
+    // FBOs don't auto-clear between frames the way the canvas does, so always clear explicitly.
+    if (config.TRANSPARENT) {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, _sceneFBO.fbo);
+        gl.clearColor(0.0, 0.0, 0.0, 0.0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+    } else {
+        drawColor(_sceneFBO, normalizeColor(config.BACK_COLOR));
+    }
 
-    // Build per-pixel model depth+colour buffer before ray marching.
     if (typeof drawModelDepthCapture === 'function') drawModelDepthCapture();
-
-    if (typeof drawModels === 'function') drawModels();
+    if (typeof drawModels === 'function') drawModels(_sceneFBO);
 
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.enable(gl.BLEND);
-    drawRayMarch(target);
+    drawRayMarch(_sceneFBO);
+
+    // ── Panel 3: ray march only (no model geometry) ───────────────────────────
+    gl.disable(gl.BLEND);
+    drawColor(_rayFBO, { r: 0, g: 0, b: 0 });
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.enable(gl.BLEND);
+    drawRayMarch(_rayFBO);
+
+    // ── Composite three panels onto the canvas ────────────────────────────────
+    gl.disable(gl.BLEND);
+
+    const depthFBO = (typeof getModelScreenFBO === 'function' && getModelScreenFBO()) || _dummyModelFBO;
+
+    _blitToPanel(_passthroughProg, _sceneFBO, 0,        0, pw,          H);  // left:   full scene
+    _blitToPanel(_depthGrayProg,   depthFBO,  pw,       0, pw,          H);  // centre: depth grayscale
+    _blitToPanel(_passthroughProg, _rayFBO,   pw * 2,   0, W - pw * 2, H);  // right:  ray march only
+
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.enable(gl.BLEND);
 }
 
 function drawColor (target, color) {
@@ -266,16 +418,10 @@ function getCameraBasis() {
     const cy = Math.cos(yaw);
 
     // yaw = 0, pitch = 0 時，看向 -Z
-    // const fwd = normalize3([
-    //     -sy * cp,
-    //      sp,
-    //     -cy * cp,
-    // ]);
-
     const fwd = normalize3([
-        -sy,
-        0,
-        -cy
+        -sy * cp,
+         sp,
+        -cy * cp,
     ]);
 
     const worldUp = [0, 1, 0];
@@ -299,8 +445,9 @@ function drawRayMarch (target) {
     const lx = config.LIGHT_DIR.x, ly = config.LIGHT_DIR.y, lz = config.LIGHT_DIR.z;
     const lLen = Math.sqrt(lx*lx + ly*ly + lz*lz);
 
-    const modelFBO = (typeof getModelScreenFBO === 'function' && getModelScreenFBO())
-                     || _dummyModelFBO;
+    // const modelFBO = (typeof getModelScreenFBO === 'function' && getModelScreenFBO())
+    //                  || _dummyModelFBO;
+    const modelFBO = getModelScreenFBO();
 
     rayMarchProgram.bind();
     gl.uniform3fv(rayMarchProgram.uniforms.uCameraPos,     eye);

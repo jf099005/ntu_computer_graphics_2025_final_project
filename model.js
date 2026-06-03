@@ -357,6 +357,14 @@ function createSceneGeometry () {
     createBox( 0.0, -1.0, 16.0, 8.0, 4.0, 0.2, [0.32, 0.35, 0.38]);
     createBox(-8.0, -1.0, 12.0, 0.2, 4.0, 16.0, [0.32, 0.35, 0.38]);
     createBox( 8.0, -1.0, 12.0, 0.2, 4.0, 16.0, [0.32, 0.35, 0.38]);
+
+    // Red indicator cube sitting at the bottom of the smoke volume, directly below the emitter.
+    const em0 = config.EMITTERS[0];
+    const br  = config.BOX_RADIUS;
+    const emWX = em0.x * 2 * br - br;
+    const emWY = em0.y * 2 * br - br;
+    const emWZ = em0.z * 2 * br - br;
+    createBox(emWX, emWY, emWZ, 0.4, 0.3, 0.4, [1.0, 0.1, 0.1]);
 }
 
 // ── Per-frame helpers ─────────────────────────────────────────────────────────
@@ -413,11 +421,12 @@ function _drawAllPrimitives (prog, vp) {
 
 // ── Per-frame draw ────────────────────────────────────────────────────────────
 
-function drawModels () {
+function drawModels (targetFBO) {
     if (_models.length === 0) return;
     if (!_modelProg) _modelProg = _buildProgram(_MODEL_FRAG, 'model');
 
-    const W = gl.drawingBufferWidth, H = gl.drawingBufferHeight;
+    const W = targetFBO ? targetFBO.width  : gl.drawingBufferWidth;
+    const H = targetFBO ? targetFBO.height : gl.drawingBufferHeight;
     const { eye, fwd, right, up } = getCameraBasis();
     const lookAt = [eye[0]+fwd[0], eye[1]+fwd[1], eye[2]+fwd[2]];
     const view   = mat4LookAt(eye, lookAt, up);
@@ -425,7 +434,7 @@ function drawModels () {
     const vp     = mat4Multiply(proj, view);
     // const vp = proj;
     gl.viewport(0, 0, W, H);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, targetFBO ? targetFBO.fbo : null);
     gl.enable(gl.DEPTH_TEST);
     gl.depthFunc(gl.LEQUAL);
     gl.depthMask(true);

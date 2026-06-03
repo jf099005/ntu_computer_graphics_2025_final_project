@@ -33,14 +33,14 @@ const config = {
     EMITTERS: [
         {
             // ── initial / fallback values ─────────────────────────────────
-            x: 0.5,  y: 0.08, z: 0.5,
+            x: 0.5,  y: 0.80, z: 0.95,
             vx: 0.0, vy: 0.01, vz: 0.0,
             density:     0.0028,
             temperature: 0.02,
 
             // ── schedule ──────────────────────────────────────────────────
             startTime: 1,   // start at t = 1 s
-            endTime:   5,   // stop  at t = 5 s
+            endTime:   50000,   // stop  at t = 5 s
 
             // ── trajectory (time-varying overrides) ───────────────────────
             // t = seconds elapsed since reset().
