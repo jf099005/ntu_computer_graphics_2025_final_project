@@ -44,7 +44,6 @@ function initFramebuffers () {
 
 function step (dt) {
     gl.disable(gl.BLEND);
-
     applyBuoyancy(dt);    // 1. temperature-driven upward force
     computeCurl();        // 2. ∇×v → curl3D
     applyVorticity(dt);   // 3. vorticity confinement
