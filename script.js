@@ -72,7 +72,7 @@ let pressure3D;    // R    – pressure
 let modeldepth3D;  // R    – model depth buffer
 let modelcolor3D;  // RGBA – model colour buffer
 
-// ── Orbit camera (initial values from config.js) ───────────────────────────────
+// ── FPS camera state (initial values from config.js) ─────────────────────────
 window.camera = {
     x: config.CAMERA_X ?? 0.0,
     y: config.CAMERA_Y ?? -2.0,

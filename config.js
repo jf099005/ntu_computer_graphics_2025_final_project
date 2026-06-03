@@ -82,13 +82,8 @@ const config = {
     CAMERA_FOV:    60,
 
     // ── FPS Camera Controls ────────────────────────────────────────────────────
-    CAMERA_MOVE_SPEED:      10.0,    // world units per second
-    CAMERA_SPRINT_MULTIPLIER: 3.0,
+    CAMERA_MOVE_SPEED:        0.05,   // world units per WASD press
     CAMERA_MOUSE_SENSITIVITY: 0.001,
-
-    // ── Camera Key Speeds ──────────────────────────────────────────────────────
-    CAMERA_KEY_SPEED: 0.05,          // radians per arrow-key press
-    CAMERA_MOVE_SPEED: 0.05,         // world units per WASD press
 
     // ── Light ──────────────────────────────────────────────────────────────────
     LIGHT_DIR:   { x: 0.4, y: 0.8, z: 0.45 },   // key-light direction (will be normalised)

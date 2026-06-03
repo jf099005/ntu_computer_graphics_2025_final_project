@@ -131,13 +131,24 @@ function mat4LookAt (eye, center, up) {
     let uz = sx*fy - sy*fx;
 
     // Column-major: [right | up | -forward | translation]
+    // return new Float32Array([
+    //     sx, sy, sz, 0,
+    //     ux, uy, uz, 0,
+    //     -fx, -fy, -fz, 0,
+    //     -(sx*eye[0]+sy*eye[1]+sz*eye[2]),
+    //     -(ux*eye[0]+uy*eye[1]+uz*eye[2]),
+    //      (fx*eye[0]+fy*eye[1]+fz*eye[2]),
+    //     1
+    // ]);
+
+
     return new Float32Array([
-        sx, sy, sz, 0,
-        ux, uy, uz, 0,
-        -fx, -fy, -fz, 0,
+        sx, ux, -fx, 0,   // col 0: [right.x, up.x, -fwd.x, 0]
+        sy, uy, -fy, 0,   // col 1: [right.y, up.y, -fwd.y, 0]
+        sz, uz, -fz, 0,   // col 2: [right.z, up.z, -fwd.z, 0]
         -(sx*eye[0]+sy*eye[1]+sz*eye[2]),
         -(ux*eye[0]+uy*eye[1]+uz*eye[2]),
-         (fx*eye[0]+fy*eye[1]+fz*eye[2]),
+        (fx*eye[0]+fy*eye[1]+fz*eye[2]),
         1
     ]);
 }

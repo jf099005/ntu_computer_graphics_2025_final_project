@@ -93,7 +93,7 @@ document.addEventListener('pointerlockchange', () => {
 window.addEventListener('mousemove', e => {
     if (document.pointerLockElement !== inputCanvas) return;
 
-    camera.yaw += e.movementX * MOUSE_SENSITIVITY;
+    camera.yaw -= e.movementX * MOUSE_SENSITIVITY;
     camera.pitch -= e.movementY * MOUSE_SENSITIVITY;
 
     camera.pitch = Math.max(

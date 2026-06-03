@@ -10,7 +10,7 @@ let displayMaterial;
 let _dummyModelFBO;   // 1×1 fallback for uModelBuffer when no depth capture exists
 
 function initRender () {
-    // Vertex shader with MVP matrix for orbitable display quads
+    // Vertex shader for full-screen display quads
     const displayVertexShader = compileShader(gl.VERTEX_SHADER, /*glsl*/`
         precision highp float;
 
@@ -242,7 +242,7 @@ function drawColor (target, color) {
     blit(target);
 }
 
-// Build orthonormal camera basis from spherical orbit angles.
+// Build orthonormal FPS camera basis from yaw/pitch angles.
 function normalize3(v) {
     const len = Math.hypot(v[0], v[1], v[2]) || 1.0;
     return [v[0] / len, v[1] / len, v[2] / len];
@@ -266,10 +266,16 @@ function getCameraBasis() {
     const cy = Math.cos(yaw);
 
     // yaw = 0, pitch = 0 時，看向 -Z
+    // const fwd = normalize3([
+    //     -sy * cp,
+    //      sp,
+    //     -cy * cp,
+    // ]);
+
     const fwd = normalize3([
-        -sy * cp,
-         sp,
-        -cy * cp,
+        -sy,
+        0,
+        -cy
     ]);
 
     const worldUp = [0, 1, 0];

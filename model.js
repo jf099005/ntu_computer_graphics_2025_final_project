@@ -418,12 +418,12 @@ function drawModels () {
     if (!_modelProg) _modelProg = _buildProgram(_MODEL_FRAG, 'model');
 
     const W = gl.drawingBufferWidth, H = gl.drawingBufferHeight;
-    const { eye, fwd, up } = getCameraBasis();
+    const { eye, fwd, right, up } = getCameraBasis();
     const lookAt = [eye[0]+fwd[0], eye[1]+fwd[1], eye[2]+fwd[2]];
     const view   = mat4LookAt(eye, lookAt, up);
-    const proj   = mat4Perspective(Math.PI / 3.0, W / H, 0.1, 20.0);
+    const proj   = mat4Perspective(config.CAMERA_FOV * Math.PI / 180, W / H, 0.1, 20.0);
     const vp     = mat4Multiply(proj, view);
-
+    // const vp = proj;
     gl.viewport(0, 0, W, H);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.enable(gl.DEPTH_TEST);
@@ -497,11 +497,11 @@ function initModelDepthBuffer () {
 function drawModelDepthCapture () {
     initModelDepthBuffer();
 
-    const { eye, fwd, up } = getCameraBasis();
+    const { eye, fwd, right, up } = getCameraBasis();
     const W = _modelScreenFBO.width, H = _modelScreenFBO.height;
     const lookAt = [eye[0]+fwd[0], eye[1]+fwd[1], eye[2]+fwd[2]];
     const view   = mat4LookAt(eye, lookAt, up);
-    const proj   = mat4Perspective(Math.PI / 3.0, W / H, 0.1, 20.0);
+    const proj   = mat4Perspective(config.CAMERA_FOV * Math.PI / 180, W / H, 0.1, 20.0);
     const vp     = mat4Multiply(proj, view);
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, _modelScreenFBO.fbo);
