@@ -8,7 +8,7 @@
 const config = {
 
     // ── Dissipation ────────────────────────────────────────────────────────────
-    DENSITY_DISSIPATION:     10.0,   // how fast smoke colour fades  (per second)
+    DENSITY_DISSIPATION:     1.0,   // how fast smoke colour fades  (per second)
     VELOCITY_DISSIPATION:    1,   // how fast fluid velocity fades
     TEMPERATURE_DISSIPATION: 1.0,   // how fast heat fades
 
@@ -22,13 +22,44 @@ const config = {
     SMOKE_WEIGHT: 0.001,             // downward gravity force on density
 
     // ── Emitters ───────────────────────────────────────────────────────────────
+    // Each entry is managed by EmitterScheduler (passes/emitter.js).
+    //
+    // Static fields  : x, y, z, vx, vy, vz, density, temperature
+    //                  (initial / fallback values)
+    // Schedule fields: startTime, endTime  (seconds since last reset)
+    // trajectory(t)  : optional function — called every frame with elapsed
+    //                  seconds; returned fields override the current values.
+    //                  Return only the fields you want to change.
     EMITTERS: [
-        { x: 0.5,  y: 0.08, z: 0.5 }
+        {
+            // ── initial / fallback values ─────────────────────────────────
+            x: 0.5,  y: 0.08, z: 0.5,
+            vx: 0.0, vy: 0.01, vz: 0.0,
+            density:     0.0028,
+            temperature: 0.02,
+
+            // ── schedule ──────────────────────────────────────────────────
+            startTime: 1,   // start at t = 1 s
+            endTime:   5,   // stop  at t = 5 s
+
+            // ── trajectory (time-varying overrides) ───────────────────────
+            // t = seconds elapsed since reset().
+            // Example: position drifts in X, intensity ramps up then down.
+            trajectory (t) {
+                const localT = t - 1;                       // time within active window
+                return {
+                    x:       0.5 + 0.1 * Math.sin(localT * Math.PI),
+                    density: 0.0028 * (1 + localT),         // ramp up over 4 s
+                };
+            },
+        },
     ],
+
+    // Global defaults (used when per-emitter values are omitted)
     EMIT_RADIUS:      0.003,        // Gaussian splat radius (volume-space units)
-    EMIT_VELOCITY_Y:  0.01,         // upward velocity injected each frame
-    EMIT_TEMPERATURE: 0.02,          // heat injected each frame
-    EMIT_DENSITY:     0.0028,         // density injected each frame
+    EMIT_VELOCITY_Y:  0.01,         // default upward velocity
+    EMIT_TEMPERATURE: 0.02,         // default heat per frame
+    EMIT_DENSITY:     0.0028,       // default density per frame
 
     // ── Ray March  [RELOAD] ────────────────────────────────────────────────────
     BOX_RADIUS:   5.0,              // half-size of the marching volume

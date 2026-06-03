@@ -60,7 +60,7 @@ function update () {
     if (resizeCanvas())
         initFramebuffers();
     if (!config.PAUSED) {
-        emitSmoke();
+        emitSmoke(dt);
         step(dt);
     }
     render(null);
