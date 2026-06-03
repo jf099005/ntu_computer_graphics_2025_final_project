@@ -84,7 +84,7 @@ const config = {
     // ── FPS Camera Controls ────────────────────────────────────────────────────
     CAMERA_MOVE_SPEED:      10.0,    // world units per second
     CAMERA_SPRINT_MULTIPLIER: 3.0,
-    CAMERA_MOUSE_SENSITIVITY: 0.002,
+    CAMERA_MOUSE_SENSITIVITY: 0.001,
 
     // ── Camera Key Speeds ──────────────────────────────────────────────────────
     CAMERA_KEY_SPEED: 0.05,          // radians per arrow-key press
