@@ -347,10 +347,115 @@ function createFloor () {
     _createBoxMesh(0, -3.0, 12, 16.0, 0.1, 16.0, [0.18, 0.20, 0.24]);
 }
 
-function createBox (x, y, z, width, height, depth, color) {
+function createBox (x, y, z, width, height, depth, color, isCollider = true) {
     _createBoxMesh(x, y, z, width, height, depth, color);
+
+    if (isCollider) {
+        _colliders.push({
+            type: 'box',
+            min: [
+                x - width  * 0.5,
+                y - height * 0.5,
+                z - depth  * 0.5,
+            ],
+            max: [
+                x + width  * 0.5,
+                y + height * 0.5,
+                z + depth  * 0.5,
+            ],
+            center: [x, y, z],
+            size: [width, height, depth],
+        });
+    }
+}
+function segmentAABBIntersection(p0, p1, box) {
+    let tMin = 0.0;
+    let tMax = 1.0;
+
+    const d = [
+        p1[0] - p0[0],
+        p1[1] - p0[1],
+        p1[2] - p0[2],
+    ];
+
+    for (let i = 0; i < 3; i++) {
+        if (Math.abs(d[i]) < 1e-8) {
+            // 線段幾乎平行於這個軸
+            if (p0[i] < box.min[i] || p0[i] > box.max[i]) {
+                return null;
+            }
+        } else {
+            const invD = 1.0 / d[i];
+            let t1 = (box.min[i] - p0[i]) * invD;
+            let t2 = (box.max[i] - p0[i]) * invD;
+
+            if (t1 > t2) {
+                const tmp = t1;
+                t1 = t2;
+                t2 = tmp;
+            }
+
+            tMin = Math.max(tMin, t1);
+            tMax = Math.min(tMax, t2);
+
+            if (tMin > tMax) {
+                return null;
+            }
+        }
+    }
+
+    return {
+        t: tMin,
+        position: [
+            p0[0] + d[0] * tMin,
+            p0[1] + d[1] * tMin,
+            p0[2] + d[2] * tMin,
+        ],
+    };
+}
+const VOLUME_CENTER = [0.0, -2.0, 12.0];
+
+function worldToVolumeUVW(pos) {
+    const r = config.BOX_RADIUS;
+
+    return [
+        (pos[0] - VOLUME_CENTER[0]) / (2.0 * r) + 0.5,
+        (pos[1] - VOLUME_CENTER[1]) / (2.0 * r) + 0.5,
+        (pos[2] - VOLUME_CENTER[2]) / (2.0 * r) + 0.5,
+    ];
 }
 
+function onProjectileHit(position, collider) {
+    console.log('Projectile hit at:', position, collider);
+
+    const uvw = worldToVolumeUVW(position);
+
+    //如果撞擊點超出 volume，就不要 splat
+    if (
+        uvw[0] < 0 || uvw[0] > 1 ||
+        uvw[1] < 0 || uvw[1] > 1 ||
+        uvw[2] < 0 || uvw[2] > 1
+    ) {
+        console.warn('Hit outside smoke volume:', uvw);
+        return;
+    }
+
+    // density：撞擊處產生煙
+    splat3D(
+        uvw[0], uvw[1], uvw[2],
+        0.8, 0.8, 0.8,
+        0.002,
+        density
+    );
+
+    // temperature：一點熱量，讓煙往上飄
+    splat3D(
+        uvw[0], uvw[1], uvw[2],
+        0.2, 0.2, 0.2,
+        0.002,
+        temperature
+    );
+}
 function createSceneGeometry () {
     createFloor();
     createBox( 2.0, -2.0, 12.0, 2.0, 2.0, 2.0, [0.84, 0.35, 0.22]);
@@ -439,19 +544,54 @@ function updateProjectiles(dt) {
     for (let i = _projectiles.length - 1; i >= 0; i--) {
         const p = _projectiles[i];
 
+        const oldPos = [
+            p.position[0],
+            p.position[1],
+            p.position[2],
+        ];
+
+        // 更新速度
         p.velocity[1] += gravity * dt;
 
-        p.position[0] += p.velocity[0] * dt;
-        p.position[1] += p.velocity[1] * dt;
-        p.position[2] += p.velocity[2] * dt;
+        const newPos = [
+            p.position[0] + p.velocity[0] * dt,
+            p.position[1] + p.velocity[1] * dt,
+            p.position[2] + p.velocity[2] * dt,
+        ];
 
-        // 簡單地板碰撞：你的 floor 大約在 y = -3
-        if (p.position[1] < -2.85) {
-            p.position[1] = -2.85;
-            p.velocity[1] *= -0.35;
-            p.velocity[0] *= 0.85;
-            p.velocity[2] *= 0.85;
+        // 找最近的碰撞點
+        let nearestHit = null;
+        let nearestCollider = null;
+
+        for (const collider of _colliders) {
+            const hit = segmentAABBIntersection(oldPos, newPos, collider);
+
+            if (hit && (!nearestHit || hit.t < nearestHit.t)) {
+                nearestHit = hit;
+                nearestCollider = collider;
+            }
         }
+
+        if (nearestHit) {
+            // 回傳接觸位置
+            onProjectileHit(nearestHit.position, nearestCollider);
+
+            // 從 _models 移除
+            const modelIndex = _models.indexOf(p);
+            if (modelIndex >= 0) {
+                _models.splice(modelIndex, 1);
+            }
+
+            // 從 _projectiles 移除
+            _projectiles.splice(i, 1);
+
+            continue;
+        }
+
+        // 沒撞到才更新位置
+        p.position[0] = newPos[0];
+        p.position[1] = newPos[1];
+        p.position[2] = newPos[2];
 
         p.life -= dt;
 

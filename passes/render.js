@@ -126,6 +126,7 @@ function initRender () {
         uniform vec3  uLightColor;
         uniform float uDensityScale;
         uniform float uAbsorption;
+        uniform vec3 uVolumeCenter;
 
         #define MAX_STEPS     ${config.MAX_STEPS}
         #define SHADOW_STEPS  ${config.SHADOW_STEPS}
@@ -133,12 +134,18 @@ function initRender () {
         #define BOX_RADIUS    ${config.BOX_RADIUS.toFixed(4)}
 
         vec2 intersectBox (vec3 ro, vec3 rd) {
-            vec3 tMin = (-BOX_RADIUS - ro) / rd;
-            vec3 tMax = ( BOX_RADIUS - ro) / rd;
+            vec3 boxMin = uVolumeCenter - vec3(BOX_RADIUS);
+            vec3 boxMax = uVolumeCenter + vec3(BOX_RADIUS);
+
+            vec3 tMin = (boxMin - ro) / rd;
+            vec3 tMax = (boxMax - ro) / rd;
             vec3 t1   = min(tMin, tMax);
             vec3 t2   = max(tMin, tMax);
-            return vec2(max(max(t1.x, t1.y), t1.z),
-                        min(min(t2.x, t2.y), t2.z));
+
+            return vec2(
+                max(max(t1.x, t1.y), t1.z),
+                min(min(t2.x, t2.y), t2.z)
+            );
         }
 
         void main () {
@@ -179,7 +186,7 @@ function initRender () {
 
                 // vec3 uvw      = pos + BOX_RADIUS;
                 
-                vec3 uvw = (pos + BOX_RADIUS) / (2.0 * BOX_RADIUS);
+                vec3 uvw = (pos - uVolumeCenter) / (2.0 * BOX_RADIUS) + 0.5;
                 vec4 d        = sampleVolume(uDensity, uvw);
                 float density = length(d.rgb) * uDensityScale;
                 if (density < 0.001) continue;
@@ -188,7 +195,8 @@ function initRender () {
                 for (int s = 0; s < SHADOW_STEPS; s++) {
                     vec3 sp = pos + uLightDir * (float(s) + 0.5) * SHADOW_STEP;
                     // shadow += length(sampleVolume(uDensity, sp + BOX_RADIUS).rgb);
-                    shadow += length(sampleVolume(uDensity, (sp + BOX_RADIUS) / (2.0 * BOX_RADIUS)).rgb);
+                    vec3 suv = (sp - uVolumeCenter) / (2.0 * BOX_RADIUS) + 0.5;
+                    shadow += length(sampleVolume(uDensity, suv).rgb);
                 }
                 float lightAtten = exp(-shadow * uDensityScale * uAbsorption * SHADOW_STEP);
 
@@ -310,5 +318,9 @@ function drawRayMarch (target) {
     gl.uniform3f(rayMarchProgram.uniforms.uLightColor,     config.LIGHT_COLOR.r, config.LIGHT_COLOR.g, config.LIGHT_COLOR.b);
     gl.uniform1f(rayMarchProgram.uniforms.uDensityScale,   config.DENSITY_SCALE);
     gl.uniform1f(rayMarchProgram.uniforms.uAbsorption,     config.ABSORPTION);
+    gl.uniform3f(
+        rayMarchProgram.uniforms.uVolumeCenter,
+        0.0, -2.0, 12.0
+    );
     blit(target);
 }
