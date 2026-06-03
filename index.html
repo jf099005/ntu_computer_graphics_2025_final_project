@@ -11,7 +11,6 @@
 
         <title>WebGL Fluid Simulation</title>
 
-        <script type="text/javascript" src="dat.gui.min.js"></script>
         <style>
             * {
                 user-select: none;
@@ -36,34 +35,10 @@
                 background: transparent;
             }
 
-            .dg {
-                opacity: 0.9;
-            }
-
-            .dg .property-name {
-                overflow: visible;
-            }
-
-            .bigFont {
-                font-size: 150%;
-                color: #8C8C8C;
-            }
-
-            .cr.function.appBigFont {
-                font-size: 150%;
-                line-height: 27px;
-                color: #A5F8D3;
-                background-color: #023C40;
-            }
-
-            .cr.function.appBigFont .property-name {
-                float: none;
-            }
-
             #camera-hud {
                 position: fixed;
                 top: 8px;
-                right: 312px;
+                right: 8px;
                 background: rgba(0, 0, 0, 0.55);
                 color: #b8d4f0;
                 font-family: 'Courier New', monospace;
@@ -81,10 +56,110 @@
                 width: 28px;
                 color: #6ab0e8;
             }
+
+            #start-overlay {
+                position: fixed;
+                inset: 0;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: rgba(5, 10, 25, 0.82);
+                backdrop-filter: blur(4px);
+                z-index: 9999;
+                cursor: pointer;
+                transition: opacity 0.4s ease;
+            }
+
+            #start-overlay.hidden {
+                opacity: 0;
+                pointer-events: none;
+            }
+
+            #start-panel {
+                text-align: center;
+                color: #c8dff5;
+                font-family: 'Courier New', monospace;
+                pointer-events: none;
+            }
+
+            #start-panel h1 {
+                margin: 0 0 6px;
+                font-size: 28px;
+                font-weight: 400;
+                letter-spacing: 2px;
+                color: #e8f4ff;
+            }
+
+            #start-panel .subtitle {
+                margin: 0 0 32px;
+                font-size: 13px;
+                color: #6ab0e8;
+                letter-spacing: 1px;
+            }
+
+            #start-panel table {
+                margin: 0 auto 36px;
+                border-collapse: collapse;
+            }
+
+            #start-panel td {
+                padding: 6px 16px;
+                font-size: 14px;
+                line-height: 1.5;
+                text-align: left;
+            }
+
+            #start-panel td.key {
+                text-align: right;
+                color: #a8d0f0;
+                font-weight: bold;
+                background: rgba(255,255,255,0.05);
+                border-radius: 4px;
+                letter-spacing: 1px;
+                padding-right: 20px;
+            }
+
         </style>
     </head>
     <body>
         <canvas></canvas>
+
+        <div id="start-overlay">
+            <div id="start-panel">
+                <h1>WebGL Fluid Simulation</h1>
+                <p class="subtitle">操作說明</p>
+                <table>
+                    <tr>
+                        <td class="key">滑鼠左鍵</td>
+                        <td>進入視角 / 投擲方塊</td>
+                    </tr>
+                    <tr>
+                        <td class="key">W / S</td>
+                        <td>前進 / 後退</td>
+                    </tr>
+                    <tr>
+                        <td class="key">A / D</td>
+                        <td>向左 / 向右移動</td>
+                    </tr>
+                    <tr>
+                        <td class="key">Space</td>
+                        <td>向上移動</td>
+                    </tr>
+                    <tr>
+                        <td class="key">Ctrl</td>
+                        <td>向下移動</td>
+                    </tr>
+                    <tr>
+                        <td class="key">滑鼠移動</td>
+                        <td>環顧四周（鎖定後）</td>
+                    </tr>
+                    <tr>
+                        <td class="key">P</td>
+                        <td>暫停 / 繼續</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
 
         <div id="camera-hud">
             <div class="hud-row"><span class="hud-label">X</span><span id="hud-cx"></span></div>
@@ -112,6 +187,16 @@
         <script src="./script.js"></script>
         <script src="./input.js"></script>
         <!-- <script src="./particles.js"></script> -->
+
+        <script>
+            (function () {
+                const overlay = document.getElementById('start-overlay');
+                setTimeout(() => {
+                    overlay.classList.add('hidden');
+                    setTimeout(() => overlay.remove(), 450);
+                }, 3000);
+            })();
+        </script>
 
     </body>
 </html>

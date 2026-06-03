@@ -7,8 +7,6 @@ resizeCanvas();
 
 const { gl, ext } = getWebGLContext(canvas);
 
-startGUI();
-
 // ── Initialise all functional modules (requires gl to exist) ──────────────────
 initBaseShaders();   // shaders.js  – shared baseVertexShader
 initDivergence();    // divergence.js
