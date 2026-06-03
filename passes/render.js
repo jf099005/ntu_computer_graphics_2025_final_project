@@ -243,6 +243,7 @@ function initRender () {
         uniform sampler2D uTexture;
         void main () {
             float d = texture2D(uTexture, vUv).a;
+            // float g = 1.0 - clamp(d / 20.0, 0.0, 1.0);//d > 0.0 ? 1.0 - clamp(d / 20.0, 0.0, 1.0) : 0.0;
             float g = d > 0.0 ? 1.0 - clamp(d / 20.0, 0.0, 1.0) : 0.0;
             gl_FragColor = vec4(g, g, g, 1.0);
         }
@@ -250,6 +251,9 @@ function initRender () {
 
     _passthroughProg = new Program(baseVertexShader, passthroughFrag);
     _depthGrayProg   = new Program(baseVertexShader, depthGrayFrag);
+
+    if (!gl.getProgramParameter(_depthGrayProg.program, gl.LINK_STATUS))
+        console.error(gl.getProgramInfoLog(_depthGrayProg.program));
 
     // Separate quad geometry for panel blitting (avoids conflicting with the main blit VAO)
     _panelQuadVB = gl.createBuffer();

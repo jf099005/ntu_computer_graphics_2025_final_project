@@ -409,8 +409,10 @@ function _drawAllPrimitives (prog, vp) {
                 if (prim.idxBuf) gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, prim.idxBuf);
             }
 
-            if (prim.idxBuf)
+            if (prim.idxBuf){
+                // console.log('Drawing indexed primitive:', prim.idxCount, 'indices of type', prim.idxType);
                 gl.drawElements(gl.TRIANGLES, prim.idxCount, prim.idxType, 0);
+            }
             else
                 gl.drawArrays(gl.TRIANGLES, 0, prim.posCount);
 

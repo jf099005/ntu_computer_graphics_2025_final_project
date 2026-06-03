@@ -250,10 +250,27 @@ function createDoubleFBO (w, h, internalFormat, format, type, param) {
     }
 }
 
+let copyProgram = null;
+
+function _getCopyProgram () {
+    if (copyProgram) return copyProgram;
+    const frag = compileShader(gl.FRAGMENT_SHADER, `
+        precision mediump float;
+        varying vec2 vUv;
+        uniform sampler2D uTexture;
+        void main () {
+            gl_FragColor = texture2D(uTexture, vUv);
+        }
+    `);
+    copyProgram = new Program(baseVertexShader, frag);
+    return copyProgram;
+}
+
 function resizeFBO (target, w, h, internalFormat, format, type, param) {
     let newFBO = createFBO(w, h, internalFormat, format, type, param);
-    copyProgram.bind();
-    gl.uniform1i(copyProgram.uniforms.uTexture, target.attach(0));
+    const cp = _getCopyProgram();
+    cp.bind();
+    gl.uniform1i(cp.uniforms.uTexture, target.attach(0));
     blit(newFBO);
     return newFBO;
 }
