@@ -1,8 +1,8 @@
 # WebGL Smoke Simulation
 
-[Play here](https://paveldogreat.github.io/WebGL-Fluid-Simulation/)
+[Play here](https://yaweihsu0201.github.io/ntu_computer_graphics_2025_final_project/)
 
-<img src="/screenshot.jpg?raw=true" width="880">
+<img src="./assets/images/thumbnail.png" width="880">
 
 ## References
 
