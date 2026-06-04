@@ -817,7 +817,7 @@ function worldToVolumeUVW(pos) {
     ];
 }
 
-function onProjectileHit(position, collider) {
+function onProjectileHit(position, collider, velocity) {
     console.log('Projectile hit at:', position, collider);
 
     const uvw = worldToVolumeUVW(position);
@@ -832,20 +832,19 @@ function onProjectileHit(position, collider) {
         return;
     }
 
-    // density：撞擊處產生煙
-    splat3D(
-        uvw[0], uvw[1], uvw[2],
-        0.8, 0.8, 0.8,
-        0.002,
-        density
-    );
+    const len = Math.hypot(velocity[0], velocity[1], velocity[2]) || 1.0;
+    const vx = velocity[0] / len;
+    const vy = velocity[1] / len;
+    const vz = velocity[2] / len;
 
-    // temperature：一點熱量，讓煙往上飄
+    splat3D(uvw[0], uvw[1], uvw[2], 0.9, 0.9, 0.9, 0.006, density);
+    splat3D(uvw[0], uvw[1], uvw[2], 0.6, 0.6, 0.6, 0.006, temperature);
+
     splat3D(
         uvw[0], uvw[1], uvw[2],
-        0.2, 0.2, 0.2,
-        0.002,
-        temperature
+        vx * 0.4, vy * 0.4, vz * 0.4,
+        0.006,
+        velocity3D
     );
 }
 function createSceneGeometry () {
@@ -923,7 +922,10 @@ function createProjectileBox(x, y, z, vx, vy, vz) {
         center: [0, 0, 0],
 
         velocity: [vx, vy, vz],
-        life: 5.0
+        life: 5.0,
+
+        age: 0.0,
+        trailTimer: 0.0,
     };
 
     _models.push(projectile);
@@ -966,7 +968,7 @@ function updateProjectiles(dt) {
 
         if (nearestHit) {
             // 回傳接觸位置
-            onProjectileHit(nearestHit.position, nearestCollider);
+            onProjectileHit(nearestHit.position, nearestCollider, p.velocity);
 
             // 從 _models 移除
             const modelIndex = _models.indexOf(p);
@@ -984,6 +986,9 @@ function updateProjectiles(dt) {
         p.position[0] = newPos[0];
         p.position[1] = newPos[1];
         p.position[2] = newPos[2];
+        
+        p.age += dt;
+        //emitProjectileTrail(p, dt);
 
         p.life -= dt;
 
@@ -1224,10 +1229,51 @@ function createProjectileModel(x, y, z, vx, vy, vz) {
 
         velocity: [vx, vy, vz],
         life: 5.0,
+
+        age: 0.0,
+        trailTimer: 0.0,
     };
 
     _models.push(projectile);
     _projectiles.push(projectile);
 }
 
+function emitProjectileTrail(p, dt) {
+    p.trailTimer += dt;
+
+    // 太靠近相機 / 剛發射時，不噴煙
+    if (p.age < 0.15) return;
+
+    // 不要每幀都噴，否則太濃
+    if (p.trailTimer < 0.04) return;
+    p.trailTimer = 0.0;
+
+    const { eye } = getCameraBasis();
+
+    const dx = p.position[0] - eye[0];
+    const dy = p.position[1] - eye[1];
+    const dz = p.position[2] - eye[2];
+    const distToCamera = Math.hypot(dx, dy, dz);
+
+    // 距離相機太近，不噴煙
+    if (distToCamera < 1.2) return;
+
+    const uvw = worldToVolumeUVW(p.position);
+
+    if (
+        uvw[0] < 0 || uvw[0] > 1 ||
+        uvw[1] < 0 || uvw[1] > 1 ||
+        uvw[2] < 0 || uvw[2] > 1
+    ) {
+        return;
+    }
+
+    // 尾煙要很淡，不然會擋視線
+    splat3D(
+        uvw[0], uvw[1], uvw[2],
+        0.06, 0.06, 0.06,
+        0.0008,
+        density
+    );
+}
 function getModelScreenFBO () { return _modelScreenFBO; }
