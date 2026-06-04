@@ -35,6 +35,26 @@ function getHorizontalMoveBasis() {
 
 window.addEventListener('keydown', e => {
     switch (e.code) {
+        case 'Digit1':
+            currentProjectileType = 'white';
+            console.log('Projectile type: white');
+            break;
+
+        case 'Digit2':
+            currentProjectileType = 'red';
+            console.log('Projectile type: red');
+            break;
+
+        case 'Digit3':
+            currentProjectileType = 'blue';
+            console.log('Projectile type: blue');
+            break;
+
+        case 'Digit4':
+            currentProjectileType = 'green';
+            console.log('Projectile type: green');
+            break;
+
         case 'KeyP':
             config.PAUSED = !config.PAUSED;
             break;
@@ -110,10 +130,8 @@ window.addEventListener('mousemove', e => {
 });
 
 window.addEventListener('mousedown', e => {
-    // 左鍵
     if (e.button !== 0) return;
 
-    // 如果還沒鎖定滑鼠，第一次左鍵只拿來鎖定
     if (document.pointerLockElement !== inputCanvas) {
         inputCanvas.requestPointerLock();
         return;
@@ -121,18 +139,25 @@ window.addEventListener('mousedown', e => {
 
     const { eye, fwd } = getCameraBasis();
 
-    const throwSpeed = 8.0;
+    const spawn = [
+        eye[0] + fwd[0] * 0.6,
+        eye[1] + fwd[1] * 0.6,
+        eye[2] + fwd[2] * 0.6,
+    ];
 
-    // 從相機前方一點點的位置生成，避免出生在相機裡面
-    const spawnX = eye[0] + fwd[0] * 0.6;
-    const spawnY = eye[1] + fwd[1] * 0.6;
-    const spawnZ = eye[2] + fwd[2] * 0.6;
+    const throwSpeed = 8.0;
 
     const vx = fwd[0] * throwSpeed;
     const vy = fwd[1] * throwSpeed + 1.2;
     const vz = fwd[2] * throwSpeed;
 
-    createProjectileModel(spawnX, spawnY, spawnZ, vx, vy, vz);
+    createProjectileModel(
+        spawn[0],
+        spawn[1],
+        spawn[2],
+        vx, vy, vz,
+        currentProjectileType
+    );
 
     e.preventDefault();
 });

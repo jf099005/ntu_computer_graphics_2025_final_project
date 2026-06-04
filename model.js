@@ -14,6 +14,26 @@ let _modelProg             = null;
 let _modelDepthCaptureProg = null;
 let _modelScreenFBO        = null;
 let _projectileTemplate = null;
+let currentProjectileType = 'white';
+
+const PROJECTILE_TYPES = {
+    white: {
+        modelColor: [1.0, 1.0, 1.0],
+        smokeColor: [0.85, 0.85, 0.85],
+    },
+    red: {
+        modelColor: [1.0, 0.0, 0.0],
+        smokeColor: [0.95, 0.15, 0.15],
+    },
+    blue: {
+        modelColor: [0.1, 0.3, 1.0],
+        smokeColor: [0.2, 0.4, 1.0],
+    },
+    green: {
+        modelColor: [0.1, 0.8, 0.2],
+        smokeColor: [0.2, 0.9, 0.3],
+    },
+};
 
 // ── Shaders ───────────────────────────────────────────────────────────────────
 
@@ -817,12 +837,11 @@ function worldToVolumeUVW(pos) {
     ];
 }
 
-function onProjectileHit(position, collider, velocity) {
+function onProjectileHit(position, collider, projectile) {
     console.log('Projectile hit at:', position, collider);
 
     const uvw = worldToVolumeUVW(position);
 
-    //如果撞擊點超出 volume，就不要 splat
     if (
         uvw[0] < 0 || uvw[0] > 1 ||
         uvw[1] < 0 || uvw[1] > 1 ||
@@ -832,14 +851,32 @@ function onProjectileHit(position, collider, velocity) {
         return;
     }
 
+    const smoke = projectile.smokeColor || [0.85, 0.85, 0.85];
+    console.log('Projectile smoke color:', smoke);
+    const velocity = projectile.velocity || [0, 0, 0];
+
     const len = Math.hypot(velocity[0], velocity[1], velocity[2]) || 1.0;
     const vx = velocity[0] / len;
     const vy = velocity[1] / len;
     const vz = velocity[2] / len;
 
-    splat3D(uvw[0], uvw[1], uvw[2], 0.9, 0.9, 0.9, 0.006, density);
-    splat3D(uvw[0], uvw[1], uvw[2], 0.6, 0.6, 0.6, 0.006, temperature);
+    // 彩色煙霧
+    splat3D(
+        uvw[0], uvw[1], uvw[2],
+        smoke[0], smoke[1], smoke[2],
+        0.006,
+        density
+    );
 
+    // 熱量，讓煙往上飄；這個不用跟顏色一樣
+    splat3D(
+        uvw[0], uvw[1], uvw[2],
+        0.35, 0.35, 0.35,
+        0.006,
+        temperature
+    );
+
+    // 撞擊衝擊速度
     splat3D(
         uvw[0], uvw[1], uvw[2],
         vx * 0.4, vy * 0.4, vz * 0.4,
@@ -847,6 +884,7 @@ function onProjectileHit(position, collider, velocity) {
         velocity3D
     );
 }
+
 function createSceneGeometry () {
     createFloor();
     createBox( 2.0, -2.0, 12.0, 2.0, 2.0, 2.0, [0.84, 0.35, 0.22]);
@@ -866,13 +904,14 @@ function _mat4T (tx, ty, tz) {
 function _mat4S (s) {
     return new Float32Array([s,0,0,0, 0,s,0,0, 0,0,s,0, 0,0,0,1]);
 }
-function createProjectileBox(x, y, z, vx, vy, vz) {
+function createProjectileBox(x, y, z, vx, vy, vz, type = 'white') {
+    const cfg = PROJECTILE_TYPES[type] || PROJECTILE_TYPES.white;
+
     const size = 0.25;
     const hx = size * 0.5;
     const hy = size * 0.5;
     const hz = size * 0.5;
 
-    // local-space box centered at origin
     const positions = new Float32Array([
         -hx, -hy,  hz,   hx, -hy,  hz,   hx,  hy,  hz,  -hx,  hy,  hz,
          hx, -hy, -hz,  -hx, -hy, -hz,  -hx,  hy, -hz,   hx,  hy, -hz,
@@ -911,7 +950,7 @@ function createProjectileBox(x, y, z, vx, vy, vz) {
         positions,
         normals,
         indices,
-        [0.95, 0.85, 0.25],
+        cfg.modelColor,
         identity
     );
 
@@ -923,9 +962,11 @@ function createProjectileBox(x, y, z, vx, vy, vz) {
 
         velocity: [vx, vy, vz],
         life: 5.0,
-
         age: 0.0,
         trailTimer: 0.0,
+
+        type: type,
+        smokeColor: cfg.smokeColor,
     };
 
     _models.push(projectile);
@@ -968,7 +1009,7 @@ function updateProjectiles(dt) {
 
         if (nearestHit) {
             // 回傳接觸位置
-            onProjectileHit(nearestHit.position, nearestCollider, p.velocity);
+            onProjectileHit(nearestHit.position, nearestCollider, p);
 
             // 從 _models 移除
             const modelIndex = _models.indexOf(p);
@@ -1215,29 +1256,37 @@ async function loadProjectileTemplate(url) {
     console.log('Projectile template loaded:', url);
 }
 
-function createProjectileModel(x, y, z, vx, vy, vz) {
+function createProjectileModel(x, y, z, vx, vy, vz, type = 'white') {
     if (!_projectileTemplate) {
         console.warn('Projectile template not loaded yet.');
         return;
     }
 
+    const cfg = PROJECTILE_TYPES[type] || PROJECTILE_TYPES.white;
+
+    const projectilePrimitives = _projectileTemplate.primitives.map(prim => ({
+        ...prim,
+        baseColor: cfg.modelColor,
+    }));
+
     const projectile = {
-        primitives: _projectileTemplate.primitives,
+        primitives: projectilePrimitives,
         position: [x, y, z],
         scale: _projectileTemplate.scale,
         center: _projectileTemplate.center,
 
         velocity: [vx, vy, vz],
         life: 5.0,
-
         age: 0.0,
         trailTimer: 0.0,
+
+        type: type,
+        smokeColor: cfg.smokeColor,
     };
 
     _models.push(projectile);
     _projectiles.push(projectile);
 }
-
 function emitProjectileTrail(p, dt) {
     p.trailTimer += dt;
 
