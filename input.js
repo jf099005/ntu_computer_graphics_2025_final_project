@@ -132,7 +132,7 @@ window.addEventListener('mousedown', e => {
     const vy = fwd[1] * throwSpeed + 1.2;
     const vz = fwd[2] * throwSpeed;
 
-    createProjectileBox(spawnX, spawnY, spawnZ, vx, vy, vz);
+    createProjectileModel(spawnX, spawnY, spawnZ, vx, vy, vz);
 
     e.preventDefault();
 });
