@@ -36,22 +36,26 @@ function getHorizontalMoveBasis() {
 window.addEventListener('keydown', e => {
     switch (e.code) {
         case 'Digit1':
-            currentProjectileType = 'white';
+            setProjectileType('white');
+            e.preventDefault();
             console.log('Projectile type: white');
             break;
 
         case 'Digit2':
-            currentProjectileType = 'red';
+            setProjectileType('red');
+            e.preventDefault();
             console.log('Projectile type: red');
             break;
 
         case 'Digit3':
-            currentProjectileType = 'blue';
+            setProjectileType('blue');
+            e.preventDefault();
             console.log('Projectile type: blue');
             break;
 
         case 'Digit4':
-            currentProjectileType = 'green';
+            setProjectileType('green');
+            e.preventDefault();
             console.log('Projectile type: green');
             break;
 

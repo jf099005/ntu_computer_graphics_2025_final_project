@@ -86,5 +86,7 @@ initSmoke();
 createSceneGeometry();
 loadProjectileTemplate('ball.glb');
 
+updateProjectileHUD();
+
 let lastUpdateTime = Date.now();
 update();

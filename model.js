@@ -35,6 +35,14 @@ const PROJECTILE_TYPES = {
     },
 };
 
+const PROJECTILE_NAMES = {
+    white: 'White smoke grenade',
+    red: 'Red smoke grenade',
+    blue: 'Blue smoke grenade',
+    green: 'Green smoke grenade',
+};
+
+
 // ── Shaders ───────────────────────────────────────────────────────────────────
 
 const _MODEL_VERT = /*glsl*/`
@@ -121,6 +129,32 @@ function _buildProgram (fragSrc, label) {
         uEye:   gl.getUniformLocation(prog, 'uEye'),
         uColor: gl.getUniformLocation(prog, 'uColor'),
     };
+}
+
+function setProjectileType(type) {
+    if (!PROJECTILE_TYPES[type]) {
+        console.warn('Unknown projectile type:', type);
+        return;
+    }
+
+    currentProjectileType = type;
+    updateProjectileHUD();
+
+    console.log('Projectile type:', type);
+}
+
+function updateProjectileHUD() {
+    const slots = document.querySelectorAll('#hotbar .slot');
+
+    slots.forEach(slot => {
+        const type = slot.dataset.type;
+        slot.classList.toggle('selected', type === currentProjectileType);
+    });
+
+    const name = document.getElementById('weapon-name');
+    if (name) {
+        name.textContent = PROJECTILE_NAMES[currentProjectileType] || currentProjectileType;
+    }
 }
 
 // ── Primitive builder ─────────────────────────────────────────────────────────
