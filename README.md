@@ -1,4 +1,4 @@
-# WebGL Fluid Simulation
+# WebGL Smoke Simulation
 
 [Play here](https://paveldogreat.github.io/WebGL-Fluid-Simulation/)
 
