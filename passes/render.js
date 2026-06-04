@@ -188,26 +188,35 @@ function initRender () {
                 // vec3 uvw      = pos + BOX_RADIUS;
                 
                 vec3 uvw = (pos - uVolumeCenter) / (2.0 * BOX_RADIUS) + 0.5;
-                vec4 d        = sampleVolume(uDensity, uvw);
+                vec4 d = sampleVolume(uDensity, uvw);
+
+                // 用 RGB 長度當濃度
                 float density = length(d.rgb) * uDensityScale;
                 if (density < 0.001) continue;
+
+                // 取得煙霧顏色
+                vec3 smokeColor = d.rgb / max(max(d.r, max(d.g, d.b)), 0.001);
 
                 float shadow = 0.0;
                 for (int s = 0; s < SHADOW_STEPS; s++) {
                     vec3 sp = pos + uLightDir * (float(s) + 0.5) * SHADOW_STEP;
-                    // shadow += length(sampleVolume(uDensity, sp + BOX_RADIUS).rgb);
                     vec3 suv = (sp - uVolumeCenter) / (2.0 * BOX_RADIUS) + 0.5;
                     shadow += length(sampleVolume(uDensity, suv).rgb);
                 }
+
                 float lightAtten = exp(-shadow * uDensityScale * uAbsorption * SHADOW_STEP);
 
                 float temp = sampleVolume(uTemperature, uvw).x;
-                vec3  tint = mix(vec3(0.85, 0.90, 1.00),
-                                 vec3(1.00, 0.55, 0.10),
-                                 clamp(temp * 0.5, 0.0, 1.0));
 
-                vec3  litCol = tint * (uLightColor * lightAtten + vec3(0.35));
-                float alpha  = 1.0 - exp(-density * stepSize * uAbsorption);
+                // 保留煙霧原色，只加一點熱量橘色
+                vec3 heatTint = mix(
+                    smokeColor,
+                    vec3(1.00, 0.55, 0.10),
+                    clamp(temp * 0.25, 0.0, 0.35)
+                );
+
+                vec3 litCol = heatTint * (uLightColor * lightAtten + vec3(0.35));
+                float alpha = 1.0 - exp(-density * stepSize * uAbsorption);
 
                 accum.rgb  += transmit * alpha * litCol;
                 accum.a    += transmit * alpha;
