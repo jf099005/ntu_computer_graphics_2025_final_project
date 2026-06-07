@@ -40,8 +40,8 @@ PavelDoGreat~\cite{pavelfluid} and extend it in several directions:
   \item A temperature field drives a buoyancy force, and vorticity confinement
         restores small-scale swirling detail lost to numerical dissipation.
   \item The volume is displayed by a per-pixel ray march with soft shadows.
-  \item 3D solid geometry—both procedural boxes and meshes loaded from
-        GLB files—is integrated into the scene.
+  % \item 3D solid geometry—both procedural boxes and meshes loaded from
+        % GLB files—is integrated into the scene.
   \item A depth pre-pass records the eye-distance of solid surfaces so the ray
         march terminates correctly at opaque boundaries.
   \item A first-person camera and a projectile system let the user explore the
@@ -50,25 +50,24 @@ PavelDoGreat~\cite{pavelfluid} and extend it in several directions:
 
 All simulation passes run as GLSL fragment shaders on a full-screen quad,
 reading from and writing to floating-point FBOs (framebuffer objects).
-The main loop in \texttt{simulation.js} drives the animation via
-\texttt{request\-Animation\-Frame}, capping $\Delta t$ at $\tfrac{1}{60}$\,s
-to keep the solver stable.
+% The main loop in \texttt{simulation.js} drives the animation via
+% \texttt{request\-Animation\-Frame}, capping $\Delta t$ at $\tfrac{1}{60}$\,s
+% to keep the solver stable.
 
 % ─────────────────────────────────────────────────────────────────────────────
 \section{Physics Simulation}
 
-We clone the repository~\cite{pavelfluid} as the starting point and rewrite all
-shaders to operate on a 3D volume instead of a 2D canvas.
+The physics simulation is based on the original 2D solver by PavelDoGreat~\cite{pavelfluid}, adding a third dimension and extra fields for temperature and buoyancy.
 
-\subsection{3D Volume Stored as a 2D Texture Atlas}
+% \subsection{3D Volume Stored as a 2D Texture Atlas}
 
-Because WebGL 1.0 does not expose 3D textures, the $64\times64\times64$ grid is
-packed into a single $512\times512$ texture by tiling the 64 Z-slices in an
-$8\times8$ grid ($64\times8=512$).
-Three GLSL helpers in \texttt{shaders.js} are prepended to every shader:
-\texttt{encodeUVW} maps a 3D coordinate to an atlas texel,
-\texttt{decodeUVW} inverts it, and \texttt{sampleVolume} provides trilinear
-interpolation by blending two adjacent Z-slices with \texttt{mix}.
+% Because WebGL 1.0 does not expose 3D textures, the $64\times64\times64$ grid is
+% packed into a single $512\times512$ texture by tiling the 64 Z-slices in an
+% $8\times8$ grid ($64\times8=512$).
+% Three GLSL helpers in \texttt{shaders.js} are prepended to every shader:
+% \texttt{encodeUVW} maps a 3D coordinate to an atlas texel,
+% \texttt{decodeUVW} inverts it, and \texttt{sampleVolume} provides trilinear
+% interpolation by blending two adjacent Z-slices with \texttt{mix}.
 
 \subsection{Per-Frame Solver Steps}
 
@@ -122,27 +121,27 @@ position or intensity, and an initial \emph{burst} (4$\times$ radius,
 % ─────────────────────────────────────────────────────────────────────────────
 \section{Adding 3D Models}
 
-\subsection{GLB File Loading}
+% \subsection{GLB File Loading}
 
-\texttt{loadGLBModel} in \texttt{model.js} implements a self-contained binary
-glTF~2.0 parser.
-It reads the GLB header to locate the JSON chunk and binary buffer chunk,
-then reconstructs the scene graph.
-Node transforms are decomposed from TRS (translation, quaternion rotation,
-scale) into column-major $4\times4$ matrices and multiplied as
-$\mathbf{M}=\mathbf{T}\mathbf{R}\mathbf{S}$.
-The scene graph is traversed recursively with \texttt{\_traverseNode},
-accumulating the world matrix from parent to child.
+% \texttt{loadGLBModel} in \texttt{model.js} implements a self-contained binary
+% glTF~2.0 parser.
+% It reads the GLB header to locate the JSON chunk and binary buffer chunk,
+% then reconstructs the scene graph.
+% Node transforms are decomposed from TRS (translation, quaternion rotation,
+% scale) into column-major $4\times4$ matrices and multiplied as
+% $\mathbf{M}=\mathbf{T}\mathbf{R}\mathbf{S}$.
+% The scene graph is traversed recursively with \texttt{\_traverseNode},
+% accumulating the world matrix from parent to child.
 
-Accessor data is read via \texttt{\_readAccessor}, handling both
-tightly-packed and interleaved buffer views for component types
-\texttt{FLOAT32}, \texttt{UINT16}, \texttt{UINT32}, and \texttt{UINT8}.
-Material colours are read from the \texttt{pbrMetallicRoughness} base-colour
-factor when present; otherwise a default grey-blue $(0.65,0.70,0.80)$ is used.
-A bounding box is derived from POSITION accessor \texttt{min}/\texttt{max}
-fields to compute a uniform scale that fits a specified target size.
+% Accessor data is read via \texttt{\_readAccessor}, handling both
+% tightly-packed and interleaved buffer views for component types
+% \texttt{FLOAT32}, \texttt{UINT16}, \texttt{UINT32}, and \texttt{UINT8}.
+% Material colours are read from the \texttt{pbrMetallicRoughness} base-colour
+% factor when present; otherwise a default grey-blue $(0.65,0.70,0.80)$ is used.
+% A bounding box is derived from POSITION accessor \texttt{min}/\texttt{max}
+% fields to compute a uniform scale that fits a specified target size.
 
-\subsection{Procedural Scene Geometry}
+% \subsection{Procedural Scene Geometry}
 
 \texttt{createSceneGeometry()} assembles the static scene from box primitives:
 
@@ -164,15 +163,15 @@ Left/right walls & $0.2\times4\times16$  & Slate $(0.32,0.35,0.38)$ \\
 Each box also registers an AABB entry in \texttt{\_colliders} for projectile
 collision detection (Section~\ref{sec:input}).
 
-\subsection{GPU Upload and VAO Management}
+% \subsection{GPU Upload and VAO Management}
 
-Every primitive—whether from a GLB or built procedurally—is uploaded by
-\texttt{\_buildPrimitive}: separate VBOs for positions and normals, an IBO for
-indices, and a VAO (WebGL~2) that encapsulates all attribute state so
-subsequent draw calls cannot corrupt each other's bindings.
-Index buffers use \texttt{UNSIGNED\_SHORT} or \texttt{UNSIGNED\_INT} depending
-on the index array type.
-Primitives without normals receive a constant up-vector $(0,1,0)$.
+% Every primitive—whether from a GLB or built procedurally—is uploaded by
+% \texttt{\_buildPrimitive}: separate VBOs for positions and normals, an IBO for
+% indices, and a VAO (WebGL~2) that encapsulates all attribute state so
+% subsequent draw calls cannot corrupt each other's bindings.
+% Index buffers use \texttt{UNSIGNED\_SHORT} or \texttt{UNSIGNED\_INT} depending
+% on the index array type.
+% Primitives without normals receive a constant up-vector $(0,1,0)$.
 
 % ─────────────────────────────────────────────────────────────────────────────
 \section{Shading}
@@ -402,11 +401,11 @@ occlusion inside thick smoke.
 More steps, or an adaptive step size based on local density, would improve
 accuracy at a proportional GPU cost.
 
-\paragraph{Single emitter.}
-The default scene configures one emitter with a four-second active window.
-The \texttt{EmitterScheduler} class already supports multiple simultaneous
-emitters with scripted trajectories, so richer smoke sources could be added
-with minimal code changes.
+% \paragraph{Single emitter.}
+% The default scene configures one emitter with a four-second active window.
+% The \texttt{EmitterScheduler} class already supports multiple simultaneous
+% emitters with scripted trajectories, so richer smoke sources could be added
+% with minimal code changes.
 
 % ─────────────────────────────────────────────────────────────────────────────
 \section{References}

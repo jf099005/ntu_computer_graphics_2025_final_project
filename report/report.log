@@ -1,4 +1,4 @@
-This is XeTeX, Version 3.141592653-2.6-0.999997 (MiKTeX 25.4) (preloaded format=xelatex 2025.10.10)  7 JUN 2026 18:21
+This is XeTeX, Version 3.141592653-2.6-0.999997 (MiKTeX 25.4) (preloaded format=xelatex 2025.10.10)  7 JUN 2026 20:48
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
@@ -1080,8 +1080,7 @@ Package microtype Info: Loading configuration file microtype.cfg.
 File: microtype.cfg 2026/03/01 v3.2d microtype main configuration file (RS)
 )
 LaTeX Info: Redefining \microtypesetup on input line 3065.
-)
-No file report.aux.
+) (report.aux)
 \openout1 = `report.aux'.
 
 LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 25.
@@ -1162,11 +1161,9 @@ LaTeX Font Info:    Overwriting math alphabet `\mathsf' in version `bold'
 LaTeX Font Info:    Overwriting math alphabet `\mathtt' in version `bold'
 (Font)                  OT1/cmtt/m/n --> TU/lmtt/b/n on input line 25.
 Package hyperref Info: Link coloring OFF on input line 25.
+ (report.out) (report.out)
 \@outlinefile=\write4
 \openout4 = `report.out'.
-
-
-Package hyperref Warning: Rerun to get /PageLabels entry.
 
 \c@lstlisting=\count396
 LaTeX Info: Redefining \microtypecontext on input line 25.
@@ -1191,9 +1188,6 @@ File: mt-cmr.cfg 2013/05/19 v2.2 microtype config. file: Computer Modern Roman
 (RS)
 )
 
-LaTeX Warning: Citation `pavelfluid' on page 1 undefined on input line 36.
-
-
 Package xeCJK Warning: Unknown CJK family `\CJKttdefault' is being ignored.
 (xeCJK)                
 (xeCJK)                Try to use `\setCJKmonofont[<...>]{<...>}' to define
@@ -1204,14 +1198,11 @@ Package microtype Info: Loading generic protrusion settings for font family
 (microtype)             For optimal results, create family-specific settings.
 (microtype)             See the microtype manual for details.
 
-LaTeX Warning: Citation `pavelfluid' on page 1 undefined on input line 60.
-
-
 
 [1
 
 ]
-Underfull \hbox (badness 4752) in paragraph at lines 113--121
+Underfull \hbox (badness 4752) in paragraph at lines 112--120
 \TU/lmr/m/n/12 (\TU/lmtt/m/n/12 passes/emitter.js\TU/lmr/m/n/12 ) supporting a 
 \TU/lmtt/m/n/12 startTime\TU/lmr/m/n/12 /\TU/lmtt/m/n/12 endTime \TU/lmr/m/n/12
  window, an
@@ -1221,84 +1212,65 @@ Underfull \hbox (badness 4752) in paragraph at lines 113--121
 
 [2]
 
-LaTeX Warning: Reference `sec:input' on page 3 undefined on input line 165.
-
-
-
 [3]
-
-[4]
-Underfull \hbox (badness 1158) in paragraph at lines 260--265
+Underfull \hbox (badness 1158) in paragraph at lines 259--264
 \TU/lmr/m/n/12 into an off-screen RGBA half-float FBO (\TU/lmtt/m/n/12 _modelSc
 reenFBO\TU/lmr/m/n/12 ) with an
  []
 
 
-Underfull \hbox (badness 1137) in paragraph at lines 267--272
+Underfull \hbox (badness 1137) in paragraph at lines 266--271
 \TU/lmtt/m/n/12 DEPTH_TEST \TU/lmr/m/n/12 (\TU/lmtt/m/n/12 LEQUAL\TU/lmr/m/n/12
  ), depth writes, and back-face culling, using the
  []
 
 
 
-[5]
-Overfull \hbox (2.71204pt too wide) in paragraph at lines 333--340
+[4]
+Overfull \hbox (2.71204pt too wide) in paragraph at lines 332--339
 \TU/lmtt/m/n/12 loadProjectileTemplate \TU/lmr/m/n/12 and cloned per throw by \
 TU/lmtt/m/n/12 createProjectileModel\TU/lmr/m/n/12 .
  []
 
 
-Underfull \hbox (badness 1337) in paragraph at lines 342--352
+Underfull \hbox (badness 1337) in paragraph at lines 341--351
 \TU/lmr/m/n/12 primitives reuse the template’s geometry buffers and simply over
 ride
  []
 
 
-Underfull \hbox (badness 2111) in paragraph at lines 354--360
+Underfull \hbox (badness 2111) in paragraph at lines 353--359
  []\TU/lmr/bx/n/12 Impact response.[] \TU/lmr/m/n/12 Every frame, \TU/lmtt/m/n/
 12 updateProjectiles(dt) \TU/lmr/m/n/12 integrates
  []
 
 
 
-[6]
-Underfull \hbox (badness 1189) in paragraph at lines 369--372
+[5]
+Underfull \hbox (badness 1189) in paragraph at lines 368--371
 \TU/lmr/m/n/12 Projectiles surviving more than 5 seconds are removed automatica
 lly.
  []
 
 
 
-[7]
+[6]
 
-[8] (report.aux)
+[7] (report.aux)
  ***********
 LaTeX2e <2025-06-01> patch level 1
 L3 programming layer <2022/08/05>
  ***********
-
-
-LaTeX Warning: There were undefined references.
-
-
-LaTeX Warning: Label(s) may have changed. Rerun to get cross-references right.
-
-
-Package rerunfilecheck Warning: File `report.out' has changed.
-(rerunfilecheck)                Rerun to get outlines right
-(rerunfilecheck)                or use package `bookmark'.
-
-Package rerunfilecheck Info: Checksums for `report.out':
-(rerunfilecheck)             Before: <no file>
-(rerunfilecheck)             After:  75D699E0FB45848F8D717E2571342C8D;3596.
+Package rerunfilecheck Info: File `report.out' has not changed.
+(rerunfilecheck)             Checksum: 2D05780440BBDAE54366D3D96EF42748;2779.
  ) 
 Here is how much of TeX's memory you used:
- 33212 strings out of 405213
- 719898 string characters out of 5493499
- 1234194 words of memory out of 5000000
- 61049 multiletter control sequences out of 15000+600000
+ 33225 strings out of 405213
+ 720050 string characters out of 5493499
+ 1235434 words of memory out of 5000000
+ 61056 multiletter control sequences out of 15000+600000
  635486 words of font info for 94 fonts, out of 8000000 for 9000
  0 hyphenation exceptions out of 8191
- 98i,12n,101p,1093b,509s stack positions out of 10000i,1000n,20000p,200000b,200000s
+ 98i,12n,101p,1093b,511s stack positions out of 10000i,1000n,20000p,200000b,200000s
 
-Output written on report.pdf (8 pages).
+Output written on report.pdf (7 pages).
