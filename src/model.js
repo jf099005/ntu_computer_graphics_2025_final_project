@@ -86,13 +86,6 @@ const _MODEL_DEPTH_FRAG = /*glsl*/`
     uniform vec3 uEye;
     uniform vec3 uColor;
     void main() {
-        // vec3 N = normalize(vN);
-        // vec3 L = normalize(vec3(0.4, 0.8, 0.45));
-        // vec3 V = normalize(uEye - vW);
-        // vec3 H = normalize(L + V);
-        // float diff = max(dot(N, L), 0.0) * 0.7 + 0.3;
-        // float spec = pow(max(dot(N, H), 0.0), 48.0) * 0.4;
-        // vec3  litColor = uColor * diff + vec3(spec);
         float depth    = length(vW - uEye);
         gl_FragColor   = vec4(0.0,0.0,0.0, depth);
     }
@@ -139,8 +132,6 @@ function setProjectileType(type) {
 
     currentProjectileType = type;
     updateProjectileHUD();
-
-    console.log('Projectile type:', type);
 }
 
 function updateProjectileHUD() {
@@ -584,160 +575,10 @@ async function loadGLBModel(url, x = 0, y = 0, z = 0, targetSize = 1.0, addToSce
         _models.push(model);
     }
 
-    console.log(
-        `[loadGLBModel] Loaded ${url}: ` +
-        `${primitives.length} primitives, ` +
-        `scale=${scale.toFixed(4)}, ` +
-        `position=(${x}, ${y}, ${z})`
-    );
-
     return model;
 }
 
-// ── GLB binary parsing ────────────────────────────────────────────────────────
-
-function _readAccessor (gltf, bin, idx) {
-    if (idx == null) return null;
-    const acc  = gltf.accessors[idx];
-    const bv   = gltf.bufferViews[acc.bufferView];
-    const base = bin.byteOffset + (bv.byteOffset || 0) + (acc.byteOffset || 0);
-    const perElem = { SCALAR:1, VEC2:2, VEC3:3, VEC4:4, MAT4:16 }[acc.type] || 1;
-    const count   = acc.count * perElem;
-    const stride  = bv.byteStride || 0;
-
-    if (acc.componentType === 5126) { // FLOAT32
-        const bytes = perElem * 4;
-        if (!stride || stride === bytes) {
-            return new Float32Array(bin.buffer.slice(base, base + count * 4));
-        }
-        // Interleaved — de-interleave
-        const out = new Float32Array(count);
-        for (let i = 0; i < acc.count; i++) {
-            const src = new Float32Array(bin.buffer.slice(base + i * stride, base + i * stride + bytes));
-            out.set(src, i * perElem);
-        }
-        return out;
-    }
-    if (acc.componentType === 5123) return new Uint16Array(bin.buffer.slice(base, base + count * 2));
-    if (acc.componentType === 5125) return new Uint32Array(bin.buffer.slice(base, base + count * 4));
-    if (acc.componentType === 5121) return new Uint8Array(bin.buffer.slice(base, base + count));
-    return null;
-}
-
-function _nodeMatrix (node) {
-    if (node.matrix) return new Float32Array(node.matrix);
-    const I = new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]);
-    let T = I.slice(), R = I.slice(), S = I.slice();
-    if (node.translation) {
-        const [tx, ty, tz] = node.translation;
-        T = new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, tx,ty,tz,1]);
-    }
-    if (node.rotation) {
-        const [x, y, z, w] = node.rotation;
-        R = new Float32Array([
-            1-2*y*y-2*z*z, 2*x*y+2*w*z,   2*x*z-2*w*y, 0,
-            2*x*y-2*w*z,   1-2*x*x-2*z*z, 2*y*z+2*w*x, 0,
-            2*x*z+2*w*y,   2*y*z-2*w*x,   1-2*x*x-2*y*y, 0,
-            0, 0, 0, 1
-        ]);
-    }
-    if (node.scale) {
-        const [sx, sy, sz] = node.scale;
-        S = new Float32Array([sx,0,0,0, 0,sy,0,0, 0,0,sz,0, 0,0,0,1]);
-    }
-    return mat4Multiply(mat4Multiply(T, R), S);
-}
-
-function _uploadMesh (gltf, bin, meshIdx, nodeMatrix, out) {
-    const mesh = gltf.meshes[meshIdx];
-    for (const prim of (mesh.primitives || [])) {
-        const attrs = prim.attributes || {};
-        if (attrs.POSITION == null) continue;
-
-        const pos  = _readAccessor(gltf, bin, attrs.POSITION);
-        const norm = _readAccessor(gltf, bin, attrs.NORMAL);
-        const idx  = _readAccessor(gltf, bin, prim.indices);
-        if (!pos) continue;
-
-        let baseColor = [0.65, 0.70, 0.80];
-        if (prim.material != null && gltf.materials) {
-            const mat = gltf.materials[prim.material];
-            const pbr = mat && mat.pbrMetallicRoughness;
-            if (pbr && pbr.baseColorFactor) baseColor = pbr.baseColorFactor.slice(0, 3);
-        }
-
-        out.push(_buildPrimitive(pos, norm, idx, baseColor, nodeMatrix));
-    }
-}
-
-function _traverseNode (gltf, bin, nodeIdx, parentMat, out) {
-    const node  = gltf.nodes[nodeIdx];
-    const local = _nodeMatrix(node);
-    const world = mat4Multiply(parentMat, local);
-    if (node.mesh != null) _uploadMesh(gltf, bin, node.mesh, world, out);
-    for (const c of (node.children || [])) _traverseNode(gltf, bin, c, world, out);
-}
-
 // ── Public API ────────────────────────────────────────────────────────────────
-
-// async function loadGLBModel (url, x, y, z, targetSize) {
-//     const resp = await fetch(url);
-//     if (!resp.ok) throw new Error(`[model] fetch failed ${resp.status}: ${url}`);
-//     const buf = await resp.arrayBuffer();
-//     const dv  = new DataView(buf);
-
-//     if (dv.getUint32(0, true) !== 0x46546C67)
-//         throw new Error('[model] Not a valid GLB (bad magic)');
-
-//     const jsonLen  = dv.getUint32(12, true);
-//     const jsonText = new TextDecoder().decode(new Uint8Array(buf, 20, jsonLen));
-//     const gltf     = JSON.parse(jsonText);
-
-//     const binBase = 20 + jsonLen;
-//     const binLen  = dv.getUint32(binBase, true);
-//     const bin     = new Uint8Array(buf, binBase + 8, binLen);
-
-//     const primitives = [];
-//     const identity   = new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]);
-
-//     const sceneIdx  = gltf.scene != null ? gltf.scene : 0;
-//     const rootNodes = (gltf.scenes && gltf.scenes[sceneIdx])
-//                       ? (gltf.scenes[sceneIdx].nodes || []) : [];
-
-//     if (rootNodes.length > 0 && gltf.nodes) {
-//         for (const ni of rootNodes) _traverseNode(gltf, bin, ni, identity, primitives);
-//     } else if (gltf.nodes) {
-//         for (let ni = 0; ni < gltf.nodes.length; ni++)
-//             _traverseNode(gltf, bin, ni, identity, primitives);
-//     } else if (gltf.meshes) {
-//         for (let mi = 0; mi < gltf.meshes.length; mi++)
-//             _uploadMesh(gltf, bin, mi, identity, primitives);
-//     }
-
-//     // Bounding box from accessor min/max (GLTF spec guarantees these for POSITION)
-//     let minX =  Infinity, minY =  Infinity, minZ =  Infinity;
-//     let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
-//     for (const mesh of (gltf.meshes || [])) {
-//         for (const prim of (mesh.primitives || [])) {
-//             const ai = prim.attributes && prim.attributes.POSITION;
-//             if (ai == null) continue;
-//             const acc = gltf.accessors[ai];
-//             if (acc.min && acc.max) {
-//                 minX = Math.min(minX, acc.min[0]); maxX = Math.max(maxX, acc.max[0]);
-//                 minY = Math.min(minY, acc.min[1]); maxY = Math.max(maxY, acc.max[1]);
-//                 minZ = Math.min(minZ, acc.min[2]); maxZ = Math.max(maxZ, acc.max[2]);
-//             }
-//         }
-//     }
-
-//     const maxDim = Math.max(maxX-minX, maxY-minY, maxZ-minZ) || 1;
-//     const center = [(minX+maxX)/2, (minY+maxY)/2, (minZ+maxZ)/2];
-//     const scale  = (targetSize != null ? targetSize : 1.5) / maxDim;
-
-//     _models.push({ primitives, position: [x, y, z], scale, center });
-//     console.log(`[model] Loaded ${url}: ${primitives.length} primitives, ` +
-//                 `scale=${scale.toFixed(4)}, worldPos=(${x},${y},${z})`);
-// }
 
 // Add a procedural mesh directly to the scene (geometry in world space).
 // positions: Float32Array (3 floats/vertex), normals: Float32Array or null,
@@ -872,8 +713,6 @@ function worldToVolumeUVW(pos) {
 }
 
 function onProjectileHit(position, collider, projectile) {
-    console.log('Projectile hit at:', position, collider);
-
     const uvw = worldToVolumeUVW(position);
 
     if (
@@ -886,7 +725,6 @@ function onProjectileHit(position, collider, projectile) {
     }
 
     const smoke = projectile.smokeColor || [0.85, 0.85, 0.85];
-    console.log('Projectile smoke color:', smoke);
     const velocity = projectile.velocity || [0, 0, 0];
 
     const len = Math.hypot(velocity[0], velocity[1], velocity[2]) || 1.0;
@@ -937,74 +775,6 @@ function _mat4T (tx, ty, tz) {
 }
 function _mat4S (s) {
     return new Float32Array([s,0,0,0, 0,s,0,0, 0,0,s,0, 0,0,0,1]);
-}
-function createProjectileBox(x, y, z, vx, vy, vz, type = 'white') {
-    const cfg = PROJECTILE_TYPES[type] || PROJECTILE_TYPES.white;
-
-    const size = 0.25;
-    const hx = size * 0.5;
-    const hy = size * 0.5;
-    const hz = size * 0.5;
-
-    const positions = new Float32Array([
-        -hx, -hy,  hz,   hx, -hy,  hz,   hx,  hy,  hz,  -hx,  hy,  hz,
-         hx, -hy, -hz,  -hx, -hy, -hz,  -hx,  hy, -hz,   hx,  hy, -hz,
-         hx, -hy,  hz,   hx, -hy, -hz,   hx,  hy, -hz,   hx,  hy,  hz,
-        -hx, -hy, -hz,  -hx, -hy,  hz,  -hx,  hy,  hz,  -hx,  hy, -hz,
-        -hx,  hy,  hz,   hx,  hy,  hz,   hx,  hy, -hz,  -hx,  hy, -hz,
-        -hx, -hy, -hz,   hx, -hy, -hz,   hx, -hy,  hz,  -hx, -hy,  hz
-    ]);
-
-    const normals = new Float32Array([
-        0, 0, 1,   0, 0, 1,   0, 0, 1,   0, 0, 1,
-        0, 0,-1,   0, 0,-1,   0, 0,-1,   0, 0,-1,
-        1, 0, 0,   1, 0, 0,   1, 0, 0,   1, 0, 0,
-       -1, 0, 0,  -1, 0, 0,  -1, 0, 0,  -1, 0, 0,
-        0, 1, 0,   0, 1, 0,   0, 1, 0,   0, 1, 0,
-        0,-1, 0,   0,-1, 0,   0,-1, 0,   0,-1, 0
-    ]);
-
-    const indices = new Uint16Array([
-         0,  1,  2,   0,  2,  3,
-         4,  5,  6,   4,  6,  7,
-         8,  9, 10,   8, 10, 11,
-        12, 13, 14,  12, 14, 15,
-        16, 17, 18,  16, 18, 19,
-        20, 21, 22,  20, 22, 23
-    ]);
-
-    const identity = new Float32Array([
-        1,0,0,0,
-        0,1,0,0,
-        0,0,1,0,
-        0,0,0,1
-    ]);
-
-    const prim = _buildPrimitive(
-        positions,
-        normals,
-        indices,
-        cfg.modelColor,
-        identity
-    );
-
-    const projectile = {
-        primitives: [prim],
-        position: [x, y, z],
-        scale: 1,
-        center: [0, 0, 0],
-
-        velocity: [vx, vy, vz],
-        life: 5.0,
-        age: 0.0,
-        trailTimer: 0.0,
-
-        type: type,
-        smokeColor: cfg.smokeColor,
-    };
-
-    _models.push(projectile);
-    _projectiles.push(projectile);
 }
 
 function updateProjectiles(dt) {
@@ -1063,8 +833,6 @@ function updateProjectiles(dt) {
         p.position[2] = newPos[2];
         
         p.age += dt;
-        //emitProjectileTrail(p, dt);
-
         p.life -= dt;
 
         if (p.life <= 0) {
@@ -1132,7 +900,6 @@ function drawModels () {
     const view   = mat4LookAt(eye, lookAt, up);
     const proj   = mat4Perspective(config.CAMERA_FOV * Math.PI / 180, W / H, 0.1, 20.0);
     const vp     = mat4Multiply(proj, view);
-    // const vp = proj;
     gl.viewport(0, 0, W, H);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.enable(gl.DEPTH_TEST);
@@ -1165,7 +932,6 @@ function initModelDepthBuffer () {
     if (!_modelDepthCaptureProg)
         _modelDepthCaptureProg = _buildProgram(_MODEL_DEPTH_FRAG, 'depth');
 
-// initModelDepthBuffer() 裡加：
     const depthRB = gl.createRenderbuffer();
     gl.bindRenderbuffer(gl.RENDERBUFFER, depthRB);
     gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, W, H);
@@ -1205,43 +971,6 @@ function initModelDepthBuffer () {
         }
     };
 }
-
-
-// function drawModelDepthCapture () {
-//     initModelDepthBuffer();
-
-//     const { eye, fwd, right, up } = getCameraBasis();
-//     const W = _modelScreenFBO.width, H = _modelScreenFBO.height;
-//     const lookAt = [eye[0]+fwd[0], eye[1]+fwd[1], eye[2]+fwd[2]];
-//     const view   = mat4LookAt(eye, lookAt, up);
-//     const proj   = mat4Perspective(config.CAMERA_FOV * Math.PI / 180, W / H, 0.1, 20.0);
-//     const vp     = mat4Multiply(proj, view);
-
-//     gl.bindFramebuffer(gl.FRAMEBUFFER, _modelScreenFBO.fbo);
-//     gl.viewport(0, 0, W, H);
-//     gl.clearColor(0.0, 0.0, 0.0, 0.0);  // A=0 → no solid surface
-//     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-//     gl.enable(gl.DEPTH_TEST);
-//     gl.depthFunc(gl.LEQUAL);
-//     gl.depthMask(true);
-//     // gl.enable(gl.CULL_FACE);
-//     // gl.cullFace(gl.BACK);
-//     gl.disable(gl.BLEND);
-
-//     if (_models.length > 0) {
-//         gl.useProgram(_modelDepthCaptureProg.prog);
-//         gl.uniform3fv(_modelDepthCaptureProg.uEye, new Float32Array(eye));
-//         _drawAllPrimitives(_modelDepthCaptureProg, vp);
-//     }
-
-//     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-//     gl.disable(gl.DEPTH_TEST);
-//     gl.depthMask(false);
-//     gl.disable(gl.CULL_FACE);
-//     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-//     gl.enable(gl.BLEND);
-// }
-
 
 
 function drawModelDepthCapture () {
@@ -1286,8 +1015,6 @@ async function loadProjectileTemplate(url) {
         0.35,
         false
     );
-
-    console.log('Projectile template loaded:', url);
 }
 
 function createProjectileModel(x, y, z, vx, vy, vz, type = 'white') {
@@ -1320,43 +1047,5 @@ function createProjectileModel(x, y, z, vx, vy, vz, type = 'white') {
 
     _models.push(projectile);
     _projectiles.push(projectile);
-}
-function emitProjectileTrail(p, dt) {
-    p.trailTimer += dt;
-
-    // 太靠近相機 / 剛發射時，不噴煙
-    if (p.age < 0.15) return;
-
-    // 不要每幀都噴，否則太濃
-    if (p.trailTimer < 0.04) return;
-    p.trailTimer = 0.0;
-
-    const { eye } = getCameraBasis();
-
-    const dx = p.position[0] - eye[0];
-    const dy = p.position[1] - eye[1];
-    const dz = p.position[2] - eye[2];
-    const distToCamera = Math.hypot(dx, dy, dz);
-
-    // 距離相機太近，不噴煙
-    if (distToCamera < 1.2) return;
-
-    const uvw = worldToVolumeUVW(p.position);
-
-    if (
-        uvw[0] < 0 || uvw[0] > 1 ||
-        uvw[1] < 0 || uvw[1] > 1 ||
-        uvw[2] < 0 || uvw[2] > 1
-    ) {
-        return;
-    }
-
-    // 尾煙要很淡，不然會擋視線
-    splat3D(
-        uvw[0], uvw[1], uvw[2],
-        0.06, 0.06, 0.06,
-        0.0008,
-        density
-    );
 }
 function getModelScreenFBO () { return _modelScreenFBO; }

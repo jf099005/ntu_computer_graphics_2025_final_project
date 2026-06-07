@@ -185,8 +185,6 @@ function initRender () {
                 float tSample = tStart + (float(i) + 0.5) * stepSize;
                 vec3  pos     = uCameraPos + tSample * rayDir;
 
-                // vec3 uvw      = pos + BOX_RADIUS;
-                
                 vec3 uvw = (pos - uVolumeCenter) / (2.0 * BOX_RADIUS) + 0.5;
                 vec4 d = sampleVolume(uDensity, uvw);
 
@@ -235,26 +233,10 @@ function initRender () {
 
         varying vec2 vUv;
         uniform sampler2D uModelBuffer;
-        uniform vec3 uBackColor;
-
-        vec3 falseColor (float t) {
-            t = clamp(t, 0.0, 1.0);
-            if (t < 0.25) { return mix(vec3(1.0, 0.0, 0.0), vec3(1.0, 1.0, 0.0), t * 4.0); }
-            if (t < 0.5)  { return mix(vec3(1.0, 1.0, 0.0), vec3(0.0, 1.0, 0.0), (t - 0.25) * 4.0); }
-            if (t < 0.75) { return mix(vec3(0.0, 1.0, 0.0), vec3(0.0, 1.0, 1.0), (t - 0.5)  * 4.0); }
-                            return mix(vec3(0.0, 1.0, 1.0), vec3(0.0, 0.0, 1.0), (t - 0.75) * 4.0);
-        }
 
         void main () {
             float depth = texture2D(uModelBuffer, vUv).a;
-            // if (depth <= 0.0) {
-            //     gl_FragColor = vec4(uBackColor, 1.0);
-            //     return;
-            // }
-            // depth = depth / 5.0;
             depth = 1.0 - depth / 20.0;
-            // float t = clamp(depth / 20.0, 0.0, 1.0);
-            // gl_FragColor = vec4(depth/20, depth/20, depth/20,1.0);
             gl_FragColor = vec4(depth, depth, depth,1.0);
         }
     `);
@@ -272,7 +254,6 @@ function initRender () {
 function drawDepthViz () {
     const modelFBO = (typeof getModelScreenFBO === 'function' && getModelScreenFBO())
                      || _dummyModelFBO;
-    const bg = normalizeColor(config.BACK_COLOR);
 
     gl.disable(gl.BLEND);
     gl.disable(gl.DEPTH_TEST);
@@ -281,7 +262,6 @@ function drawDepthViz () {
 
     depthVizProgram.bind();
     gl.uniform1i(depthVizProgram.uniforms.uModelBuffer, modelFBO.attach(0));
-    gl.uniform3f(depthVizProgram.uniforms.uBackColor, bg.r, bg.g, bg.b);
     blit(null);
 }
 

@@ -38,25 +38,21 @@ window.addEventListener('keydown', e => {
         case 'Digit1':
             setProjectileType('white');
             e.preventDefault();
-            console.log('Projectile type: white');
             break;
 
         case 'Digit2':
             setProjectileType('red');
             e.preventDefault();
-            console.log('Projectile type: red');
             break;
 
         case 'Digit3':
             setProjectileType('blue');
             e.preventDefault();
-            console.log('Projectile type: blue');
             break;
 
         case 'Digit4':
             setProjectileType('green');
             e.preventDefault();
-            console.log('Projectile type: green');
             break;
 
         case 'KeyP':
@@ -115,10 +111,6 @@ window.addEventListener('keydown', e => {
 
 inputCanvas.addEventListener('click', () => {
     inputCanvas.requestPointerLock();
-});
-
-document.addEventListener('pointerlockchange', () => {
-    console.log('pointer lock:', document.pointerLockElement === inputCanvas);
 });
 
 window.addEventListener('mousemove', e => {

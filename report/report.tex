@@ -1,0 +1,426 @@
+\documentclass[a4paper, 12pt]{article}
+\usepackage{fontspec}
+\usepackage{xeCJK}
+\usepackage{amsmath}
+\setCJKmainfont{Noto Sans CJK SC}
+
+\usepackage{hyperref}
+\usepackage{algorithm}
+\usepackage[noend]{algpseudocode}
+\usepackage{mdframed}
+\usepackage{xcolor}
+\usepackage{amsthm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage[most]{tcolorbox}
+\usepackage[protrusion=true,expansion=false]{microtype}
+\emergencystretch=2em
+
+\title{Interactive Computer Graphics Final Project\\[0.3em]
+       \large{Real-time Smoke Simulation and Shading}}
+\author{蔡平樂 b11201024 \and 許佑威 b11901089}
+\date{\today}
+
+\begin{document}
+\vspace{-2em}
+\maketitle
+\vspace{-3em}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Introduction}
+
+This project implements a real-time volumetric smoke simulation that runs
+entirely in the browser using WebGL.
+We start from the open-source 2D fluid simulation by
+PavelDoGreat~\cite{pavelfluid} and extend it in several directions:
+
+\begin{enumerate}[leftmargin=*, nosep]
+  \item The 2D solver is lifted into a full 3D solver.
+  \item A temperature field drives a buoyancy force, and vorticity confinement
+        restores small-scale swirling detail lost to numerical dissipation.
+  \item The volume is displayed by a per-pixel ray march with soft shadows.
+  \item 3D solid geometry—both procedural boxes and meshes loaded from
+        GLB files—is integrated into the scene.
+  \item A depth pre-pass records the eye-distance of solid surfaces so the ray
+        march terminates correctly at opaque boundaries.
+  \item A first-person camera and a projectile system let the user explore the
+        scene and trigger smoke bursts on impact.
+\end{enumerate}
+
+All simulation passes run as GLSL fragment shaders on a full-screen quad,
+reading from and writing to floating-point FBOs (framebuffer objects).
+The main loop in \texttt{simulation.js} drives the animation via
+\texttt{request\-Animation\-Frame}, capping $\Delta t$ at $\tfrac{1}{60}$\,s
+to keep the solver stable.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Physics Simulation}
+
+We clone the repository~\cite{pavelfluid} as the starting point and rewrite all
+shaders to operate on a 3D volume instead of a 2D canvas.
+
+\subsection{3D Volume Stored as a 2D Texture Atlas}
+
+Because WebGL 1.0 does not expose 3D textures, the $64\times64\times64$ grid is
+packed into a single $512\times512$ texture by tiling the 64 Z-slices in an
+$8\times8$ grid ($64\times8=512$).
+Three GLSL helpers in \texttt{shaders.js} are prepended to every shader:
+\texttt{encodeUVW} maps a 3D coordinate to an atlas texel,
+\texttt{decodeUVW} inverts it, and \texttt{sampleVolume} provides trilinear
+interpolation by blending two adjacent Z-slices with \texttt{mix}.
+
+\subsection{Per-Frame Solver Steps}
+
+\texttt{step(dt)} in \texttt{simulation.js} executes the following passes each
+frame.
+
+\paragraph{Buoyancy.}
+Hot smoke rises and dense smoke sinks (\texttt{passes/buoyancy.js}):
+\[
+  v_y \mathrel{+}= \Delta t\,\bigl(B\cdot T - W\cdot|\boldsymbol{\rho}|\bigr),
+  \quad B=0.1,\quad W=0.001
+\]
+
+\paragraph{Vorticity confinement.}
+The curl $\boldsymbol{\omega}=\nabla\times\mathbf{v}$ is computed with
+six-neighbour finite differences, and a restoring force is injected:
+\[
+  \mathbf{f} = \varepsilon\,\bigl(\hat{\boldsymbol{\eta}}\times\boldsymbol{\omega}\bigr),
+  \quad \hat{\boldsymbol{\eta}} = \operatorname{normalize}(\nabla|\boldsymbol{\omega}|),
+  \quad \varepsilon = 30
+\]
+
+\paragraph{Pressure projection.}
+Incompressibility is enforced in three sub-steps:
+(i)~divergence $\nabla\cdot\mathbf{v}$ with six-neighbour differences and
+no-slip boundaries;
+(ii)~25 Jacobi iterations warm-started at $0.8\times$ the previous pressure:
+\[p = \tfrac{1}{6}(p_L+p_R+p_B+p_T+p_F+p_K - \mathrm{div});\]
+(iii)~velocity correction $\mathbf{v}\mathrel{-}=\tfrac{1}{2}\nabla p$.
+
+\paragraph{Semi-Lagrangian advection.}
+Velocity, density, and temperature are each back-traced and resampled
+(\texttt{passes/advection.js}):
+\[
+  \mathbf{uvw}_{\text{prev}} = \mathbf{uvw} - \Delta t\cdot\mathbf{v}(\mathbf{uvw}),
+  \qquad
+  q^{n+1} = q^n(\mathbf{uvw}_{\text{prev}})\,/\,(1 + d\,\Delta t)
+\]
+
+\subsection{Smoke Emitters}
+
+Smoke is injected by Gaussian splats (\texttt{passes/splat.js}):
+$q(\mathbf{uvw}) \mathrel{+}= \mathbf{c}\cdot
+\exp(-|\mathbf{uvw}-\mathbf{p}|^2/r)$.
+Each emitter is managed by an \texttt{EmitterScheduler}
+(\texttt{passes/emitter.js}) supporting a \texttt{startTime}/\texttt{endTime}
+window, an optional per-frame \emph{trajectory callback} that overrides
+position or intensity, and an initial \emph{burst} (4$\times$ radius,
+2$\times$ temperature) that immediately fills the local neighbourhood.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Adding 3D Models}
+
+\subsection{GLB File Loading}
+
+\texttt{loadGLBModel} in \texttt{model.js} implements a self-contained binary
+glTF~2.0 parser.
+It reads the GLB header to locate the JSON chunk and binary buffer chunk,
+then reconstructs the scene graph.
+Node transforms are decomposed from TRS (translation, quaternion rotation,
+scale) into column-major $4\times4$ matrices and multiplied as
+$\mathbf{M}=\mathbf{T}\mathbf{R}\mathbf{S}$.
+The scene graph is traversed recursively with \texttt{\_traverseNode},
+accumulating the world matrix from parent to child.
+
+Accessor data is read via \texttt{\_readAccessor}, handling both
+tightly-packed and interleaved buffer views for component types
+\texttt{FLOAT32}, \texttt{UINT16}, \texttt{UINT32}, and \texttt{UINT8}.
+Material colours are read from the \texttt{pbrMetallicRoughness} base-colour
+factor when present; otherwise a default grey-blue $(0.65,0.70,0.80)$ is used.
+A bounding box is derived from POSITION accessor \texttt{min}/\texttt{max}
+fields to compute a uniform scale that fits a specified target size.
+
+\subsection{Procedural Scene Geometry}
+
+\texttt{createSceneGeometry()} assembles the static scene from box primitives:
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Object} & \textbf{Size (W$\times$H$\times$D)} & \textbf{Colour (RGB)} \\
+\midrule
+Floor            & $16\times0.1\times16$ & Dark grey $(0.18,0.20,0.24)$ \\
+Red box          & $2\times2\times2$     & Brick red $(0.84,0.35,0.22)$ \\
+Teal box         & $1.5\times1.5\times1.5$ & Teal $(0.28,0.78,0.82)$ \\
+Yellow box       & $1\times1\times1$     & Sand $(0.75,0.72,0.36)$ \\
+Front/back walls & $8\times4\times0.2$   & Slate $(0.32,0.35,0.38)$ \\
+Left/right walls & $0.2\times4\times16$  & Slate $(0.32,0.35,0.38)$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Each box also registers an AABB entry in \texttt{\_colliders} for projectile
+collision detection (Section~\ref{sec:input}).
+
+\subsection{GPU Upload and VAO Management}
+
+Every primitive—whether from a GLB or built procedurally—is uploaded by
+\texttt{\_buildPrimitive}: separate VBOs for positions and normals, an IBO for
+indices, and a VAO (WebGL~2) that encapsulates all attribute state so
+subsequent draw calls cannot corrupt each other's bindings.
+Index buffers use \texttt{UNSIGNED\_SHORT} or \texttt{UNSIGNED\_INT} depending
+on the index array type.
+Primitives without normals receive a constant up-vector $(0,1,0)$.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Shading}
+
+\subsection{3D Model Shading: Blinn-Phong}
+
+Solid geometry is rendered with the \texttt{\_MODEL\_FRAG} shader in
+\texttt{model.js}.
+The key-light direction is fixed at $(0.4,0.8,0.45)$ (normalised in-shader)
+and the eye position is supplied per-frame via the \texttt{uEye} uniform:
+\[
+  I = \mathbf{c}_{\text{base}}
+      \underbrace{\bigl(\max(\mathbf{N}\cdot\mathbf{L},0)\cdot0.7+0.3\bigr)}_{\text{diffuse + ambient}}
+    + \underbrace{\max(\mathbf{N}\cdot\mathbf{H},0)^{48}\cdot0.4}_{\text{specular}}
+\]
+where $\mathbf{H}=\operatorname{normalize}(\mathbf{L}+\mathbf{V})$.
+The constant $0.3$ provides a soft ambient floor; the exponent $48$ gives a
+moderately tight specular highlight.
+Normals are brought to world space using the upper-left $3\times3$ submatrix
+of the model matrix.
+
+\subsection{Smoke Shading: Volumetric Ray Marching}
+
+The smoke volume is rendered by \texttt{drawRayMarch} in \texttt{passes/render.js}.
+
+\paragraph{Camera and ray construction.}
+An FPS camera basis $(\hat{F},\hat{R},\hat{U})$ is built from yaw and pitch
+angles at runtime:
+\[
+  \hat{d} = \operatorname{normalize}\!\left(
+    \hat{F}
+    + \mathrm{ndc}_x\cdot\mathrm{aspect}\cdot\tan\tfrac{\mathrm{FOV}}{2}\cdot\hat{R}
+    + \mathrm{ndc}_y\cdot\tan\tfrac{\mathrm{FOV}}{2}\cdot\hat{U}
+  \right)
+\]
+Field of view is $60^\circ$; the aspect ratio is computed from the canvas each
+frame.
+
+\paragraph{Ray-box intersection.}
+The ray is intersected with the volume AABB (half-extent 5.0, centre
+$(0,-2,12)$) using the slab method, yielding $t_{\text{start}}$ and
+$t_{\text{end}}$.
+
+\paragraph{Step-and-accumulate loop.}
+The interval $[t_{\text{start}},t_{\text{end}}]$ is divided into 64 equal
+steps (\texttt{MAX\_STEPS}).
+At each sample position $\mathbf{p}$:
+
+\begin{enumerate}[nosep]
+\item The volume UVW is $(\mathbf{p}-\mathbf{c}_{\text{vol}})/(2r)+0.5$.
+      Samples with density $\rho<0.001$ are skipped.
+
+\item \textbf{Soft shadow.}
+      Three steps of length 0.12 are marched toward the light; accumulated
+      density attenuates illumination:
+      $\ell = \exp(-\sigma_{\text{sh}}\cdot\texttt{DENSITY\_SCALE}\cdot
+      \texttt{ABSORPTION}\cdot\texttt{SHADOW\_STEP})$.
+
+\item \textbf{Temperature tint.}
+      Sample temperature interpolates between cool blue-white
+      $(0.85,0.90,1.00)$ and warm orange $(1.00,0.55,0.10)$:
+      $\mathbf{c}_{\text{tint}}=\operatorname{mix}(\text{cool},\text{warm},
+      \operatorname{clamp}(T\cdot0.5,0,1))$.
+
+\item \textbf{Front-to-back compositing:}
+      \[
+        \alpha = 1-e^{-\rho\,\Delta s\cdot\texttt{ABS}},\quad
+        \mathbf{c}_{\text{acc}} \mathrel{+}= \tau\,\alpha\,
+          \mathbf{c}_{\text{tint}}(\mathbf{c}_{\text{light}}\,\ell+0.35),\quad
+        \tau \mathrel{*}= (1-\alpha)
+      \]
+      Marching stops early when $\tau<0.01$.
+\end{enumerate}
+
+The $0.35$ ambient term prevents smoke in full shadow from being completely
+invisible.
+The result is blended over the background using premultiplied alpha
+(\texttt{blendFunc(ONE,\allowbreak\ ONE\_MINUS\_SRC\_ALPHA)}).
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Depth Buffer Integration}
+
+\subsection{Depth Pre-Pass}
+
+Before ray marching, \texttt{drawModelDepthCapture()} renders all scene
+primitives into an off-screen RGBA half-float FBO (\texttt{\_modelScreenFBO})
+with an attached 16-bit depth renderbuffer.
+The shader (\texttt{\_MODEL\_DEPTH\_FRAG}) writes the eye-to-surface Euclidean
+distance into the \emph{alpha} channel:
+\[
+  \texttt{gl\_FragColor} = \texttt{vec4}(0,\,0,\,0,\,|\mathbf{w}-\mathbf{eye}|)
+\]
+Alpha zero signals no solid surface at that pixel.
+The pass enables \texttt{DEPTH\_TEST} (\texttt{LEQUAL}), depth writes, and
+back-face culling, using the same $60^\circ$ perspective and view matrix as
+the ray march so the recorded distances are consistent.
+
+\subsection{Ray-March Integration}
+
+Inside \texttt{drawRayMarch}, the pre-pass texture is bound as
+\texttt{uModelBuffer}.
+For each pixel, the alpha value gives the model depth $d_{\text{model}}$,
+which truncates the march interval:
+\[
+  t_{\text{end}} = \min(t_{\text{AABB}},\; d_{\text{model}})
+\]
+When alpha is zero, $d_{\text{model}}$ is set to $10^9$ so the ray travels
+the full AABB extent.
+If $t_{\text{end}}\le t_{\text{start}}$, the fragment outputs transparent
+black immediately, saving the cost of the loop entirely.
+
+\subsection{Render Order}
+
+The final frame is assembled in three ordered draw calls:
+\begin{enumerate}[nosep]
+  \item Depth pre-pass $\to$ off-screen FBO.
+  \item Rasterise solid geometry $\to$ default framebuffer (Blinn-Phong,
+        depth test on).
+  \item Ray march $\to$ default framebuffer (reads pre-pass depth, blended
+        over rasterised models with
+        \texttt{blendFunc(ONE, ONE\_MINUS\_SRC\_ALPHA)}).
+\end{enumerate}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Interactive Controls}
+\label{sec:input}
+
+\subsection{First-Person Camera}
+
+Camera control in \texttt{input.js} uses the Pointer Lock API for raw mouse
+deltas.
+Movement basis is derived from the current yaw so that WASD stays in the XZ
+plane regardless of pitch.
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+\textbf{Key / Input} & \textbf{Action} \\
+\midrule
+\texttt{W}/\texttt{S}        & Move forward / backward \\
+\texttt{A}/\texttt{D}        & Strafe left / right \\
+\texttt{Shift}/\texttt{Ctrl} & Move up / down \\
+Mouse move (locked)          & Rotate yaw and pitch \\
+\texttt{1}--\texttt{4}       & Select smoke-grenade colour (hotbar) \\
+Left click                   & Throw the selected smoke grenade \\
+\texttt{P}                   & Pause / resume simulation \\
+\texttt{Space}               & Toggle depth visualisation \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Pitch is clamped to $\pm0.44\pi$.
+Move speed is 0.05 world units per key event; mouse sensitivity is
+0.002\,rad/pixel; both are configurable in \texttt{config.js}.
+
+\subsection{Projectile System: Smoke Grenades}
+
+Left-clicking (after pointer lock) throws a \emph{smoke grenade}—an instance
+of a GLB mesh (\texttt{assets/models/ball.glb}) loaded once at start-up by
+\texttt{loadProjectileTemplate} and cloned per throw by
+\texttt{createProjectileModel}.
+Each grenade spawns 0.6 units ahead of the camera with initial velocity
+$\mathbf{v}_0 = 8.0\,\hat{F} + (0,1.2,0)$; the upward bias gives it a
+natural arc.
+
+\paragraph{Hotbar and grenade types.}
+\texttt{PROJECTILE\_TYPES} in \texttt{model.js} defines four grenade colours
+(white, red, blue, green), each pairing a model tint with a matching smoke
+colour.
+Pressing \texttt{1}–\texttt{4} calls \texttt{setProjectileType}, which updates
+\texttt{currentProjectileType} and refreshes an on-screen hotbar
+(\texttt{updateProjectileHUD}): the selected slot is highlighted and a
+\texttt{\#weapon-name} label shows the grenade's display name (e.g.\ ``Red
+smoke grenade'').
+Cloned primitives reuse the template's geometry buffers and simply override
+\texttt{baseColor} with the type's tint, avoiding redundant GPU uploads.
+
+\paragraph{Impact response.}
+Every frame, \texttt{updateProjectiles(dt)} integrates gravity
+($a_y=-3.0$) and tests the motion segment against each AABB in
+\texttt{\_colliders} using the slab method.
+On the nearest hit, \texttt{onProjectileHit} converts the impact point to
+volume UVW and performs three Gaussian splats (\texttt{splat3D}, radius
+0.006):
+\begin{enumerate}[nosep]
+  \item the grenade's smoke colour into the \emph{density} field, producing a
+        coloured smoke burst;
+  \item a uniform heat value $(0.35,0.35,0.35)$ into the \emph{temperature}
+        field, so the burst rises by buoyancy;
+  \item the normalised impact velocity, scaled by $0.4$, into the
+        \emph{velocity} field, so the burst inherits the grenade's direction
+        of travel as an initial impulse.
+\end{enumerate}
+Projectiles surviving more than 5 seconds are removed automatically.
+Because projectiles participate in the depth pre-pass, they correctly
+occlude the smoke volume.
+
+\subsection{Depth Visualisation}
+
+Pressing \texttt{Space} toggles the flag
+\texttt{config.SHOW\_DEPTH\_VIZ}.
+In this mode, \texttt{drawDepthViz} reads the alpha channel of the pre-pass
+FBO and maps eye-distance to greyscale ($1 - d/20$), giving a live view of
+the depth buffer for debugging.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Limitations and Future Work}
+
+\paragraph{Smoke does not flow around solids.}
+The depth pre-pass makes smoke \emph{appear} to stop at surfaces, but the
+fluid solver has no solid boundary conditions.
+Velocity and density fields pass through geometry unimpeded.
+A proper fix would stamp a solid-occupancy mask each frame and enforce
+no-slip conditions in the divergence and pressure-gradient passes.
+
+\paragraph{Volume resolution.}
+At $64^3$ voxels, fine detail is lost at close range due to trilinear
+smearing.
+Doubling the linear resolution to $128^3$ would require a $1024\times1024$
+atlas (4$\times$ the memory and roughly 8$\times$ the shader work), making
+higher resolution expensive without further optimisation such as adaptive
+grid refinement.
+
+\paragraph{Shadow quality.}
+Only three fixed-length shadow-ray steps are used, which underestimates
+occlusion inside thick smoke.
+More steps, or an adaptive step size based on local density, would improve
+accuracy at a proportional GPU cost.
+
+\paragraph{Single emitter.}
+The default scene configures one emitter with a four-second active window.
+The \texttt{EmitterScheduler} class already supports multiple simultaneous
+emitters with scripted trajectories, so richer smoke sources could be added
+with minimal code changes.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{References}
+
+\begin{thebibliography}{9}
+\bibitem{pavelfluid}
+  P.\ Dobrev (PavelDoGreat),
+  \textit{WebGL Fluid Simulation}.\\
+  \url{https://github.com/PavelDoGreat/WebGL-Fluid-Simulation}
+
+\bibitem{firesim}
+  A.\ Chan,
+  \textit{Real-time Fire Simulation}.\\
+  \url{https://andrewkchan.dev/posts/fire.html}
+\end{thebibliography}
+
+\end{document}
