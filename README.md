@@ -6,6 +6,19 @@ An interactive real-time volumetric smoke simulation built with WebGL for the NT
 
 <img src="./assets/images/thumbnail.png" width="880">
 
+## Performance Notice
+
+This project runs a real-time WebGL volumetric smoke simulation and may be slow on integrated graphics.
+For smoother performance, please run your browser with a dedicated GPU.
+
+On Windows, you can enable this from:
+
+```text
+Settings > System > Display > Graphics > Select browser > Options > High performance
+```
+
+After changing the setting, restart the browser and open the project again.
+
 ## Overview
 
 This project implements a browser-based 3D smoke simulation with real-time rendering and first-person interaction.  
